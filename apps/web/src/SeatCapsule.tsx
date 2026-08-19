@@ -8,7 +8,6 @@ export function SeatCapsule({
   you,
   active,
   thinking,
-  thinkRemain,
   place,
   showCards,
 }: {
@@ -16,7 +15,6 @@ export function SeatCapsule({
   you: boolean;
   active: boolean;
   thinking: boolean;
-  thinkRemain: number | null;
   place: "bottom" | "top" | "left" | "right";
   showCards: boolean;
 }) {
@@ -35,7 +33,6 @@ export function SeatCapsule({
   }, [thinking, player.id]);
 
   const line = lines[tick % lines.length] ?? lines[0];
-  const seconds = thinkRemain !== null ? Math.max(1, thinkRemain) : null;
 
   return (
     <div
@@ -56,7 +53,6 @@ export function SeatCapsule({
             <i />
             <i />
           </span>
-          {seconds !== null ? <em>{seconds}s</em> : null}
         </div>
       ) : null}
       <div className="capsule">

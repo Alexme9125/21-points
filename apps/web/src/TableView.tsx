@@ -63,6 +63,10 @@ export function TableView({
   const youIndex = Math.max(0, seats.findIndex((p) => p.id === room.you));
   const remain = room.deadline ? Math.max(0, Math.ceil((room.deadline - now) / 1000)) : null;
   const yourTurn = Boolean(state && state.phase === "awaiting" && state.currentPlayerId === room.you);
+  const currentKind = seats.find((p) => p.id === state?.currentPlayerId)?.kind;
+  const showTurnClock = Boolean(
+    remain !== null && state?.phase === "awaiting" && currentKind === "human",
+  );
   const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}`;
   const [lockedTurn, setLockedTurn] = useState("");
   const [sound, setSound] = useState(isSoundOn);
@@ -91,7 +95,7 @@ export function TableView({
         </div>
         <div className="top-right">
           <em className="status-text">{play.status}</em>
-          {remain !== null && state?.phase === "awaiting" ? <span className="timer">{remain}s</span> : null}
+          {showTurnClock ? <span className="timer">{remain}s</span> : null}
           <button
             className={`text-btn sound-btn ${sound ? "on" : "off"}`}
             type="button"
@@ -164,7 +168,6 @@ export function TableView({
                 you={player.id === room.you}
                 active={Boolean(isCurrent)}
                 thinking={botThinking}
-                thinkRemain={botThinking ? remain : null}
                 place={place}
                 showCards={Boolean(player.cards && (isCurrent || isPrev))}
               />

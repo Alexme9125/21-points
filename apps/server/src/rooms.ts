@@ -180,7 +180,7 @@ function schedule(room: Room): void {
     if (!player) return;
     if (player.kind === "bot") {
       const think = botThinkMs(table);
-      room.deadline = Date.now() + think;
+      room.deadline = null;
       room.timers.bot = setTimeout(() => {
         try {
           const action = chooseBotAction(room.table!);
