@@ -76,7 +76,7 @@ export function TableView({
 
   const prevId = state ? previousPlayerId(seats, state.currentIndex) : null;
   const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}`;
-  const maxDeals = state?.config.dealsUntilSplit ?? 40;
+  const maxDeals = state?.config.dealsUntilSplit ?? 24;
   const ante = state?.config.ante ?? DEFAULT_CONFIG.ante;
   const minAdd = state?.config.minAdd ?? DEFAULT_CONFIG.minAdd;
 

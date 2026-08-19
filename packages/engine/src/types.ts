@@ -52,7 +52,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   maxAdd: 100_000,
   maxLoss: 200_000,
   seatCount: 4,
-  dealsUntilSplit: 40,
+  dealsUntilSplit: 24,
 };
 
 export const POOL_NAME = "许愿池";

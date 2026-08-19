@@ -143,9 +143,9 @@ describe("table flow", () => {
     expect(state.projectPool).toBeGreaterThan(0);
   });
 
-  it("uses a 50K ante and 40 deals before splitting", () => {
+  it("uses a 50K ante and 24 deals before splitting", () => {
     expect(DEFAULT_CONFIG.ante).toBe(50_000);
-    expect(DEFAULT_CONFIG.dealsUntilSplit).toBe(40);
+    expect(DEFAULT_CONFIG.dealsUntilSplit).toBe(24);
     expect(DEFAULT_CONFIG.minAdd).toBe(5_000);
   });
 

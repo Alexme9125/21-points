@@ -16,7 +16,7 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
           <li>连张（相邻点数）系统自动放弃。A 最小、K 最大，A 和 K 不是连张。</li>
           <li>第三张与其中一张同点是牛角尖，扣 2 倍；底牌是 A+K 则扣 4 倍。</li>
           <li>两张同点只能下最小添菜。再开出同点通吃许愿池，否则只扣最小添菜。</li>
-          <li>许愿池被赢空则本盘结束；满 40 次发牌，摊掉池里一半。</li>
+          <li>许愿池被赢空则本盘结束；满 24 次发牌，摊掉池里一半。</li>
         </ul>
         <button className="btn primary" onClick={onClose}>
           知道了
