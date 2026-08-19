@@ -6,6 +6,7 @@ import {
   continueFromSettlement,
   createTable,
   currentPlayer,
+  DEFAULT_CONFIG,
   LLM_PERSONAS,
   pickN,
   startHand,
@@ -150,7 +151,7 @@ function startTable(room: Room): void {
         kind: s.kind,
         personaId: s.personaId,
       })),
-      undefined,
+      { ...DEFAULT_CONFIG },
       room.rng,
     ),
   );
@@ -177,7 +178,8 @@ function schedule(room: Room): void {
     const player = currentPlayer(table);
     if (!player) return;
     if (player.kind === "bot") {
-      const think = botThinkMs(Math.random());
+      const think = botThinkMs(table);
+      room.deadline = Date.now() + think;
       room.timers.bot = setTimeout(() => {
         try {
           const action = chooseBotAction(room.table!);
@@ -207,10 +209,10 @@ function schedule(room: Room): void {
   if (table.phase === "reveal") {
     const delay =
       table.outcome?.kind === "fold"
-        ? 1_400
+        ? 2_200
         : table.outcome?.kind === "consecutive"
-          ? 2_000
-          : 2_600;
+          ? 2_800
+          : 3_400;
     room.timers.advance = setTimeout(() => {
       room.table = advance(room.table!);
       broadcast(room);

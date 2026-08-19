@@ -152,7 +152,16 @@ describe("table flow", () => {
     expect(state.players.every((p) => p.tokens === DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante)).toBe(
       true,
     );
-    expect(state.projectPool).toBeGreaterThanOrEqual(DEFAULT_CONFIG.ante * 4);
+    expect(state.projectPool).toBe(DEFAULT_CONFIG.ante * 4);
+    expect(state.logs.filter((line) => line.kind === "ante")).toHaveLength(4);
+    expect(state.config.ante).toBe(50_000);
     expect(state.handNumber).toBe(1);
+  });
+
+  it("still collects a 50K ante when createTable is called without an explicit config", () => {
+    const state = startHand(createTable(fourPlayers(), undefined, 3));
+    expect(state.config.ante).toBe(DEFAULT_CONFIG.ante);
+    expect(state.projectPool).toBe(DEFAULT_CONFIG.ante * 4);
+    expect(state.players[0]!.tokens).toBe(DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante);
   });
 });

@@ -1,4 +1,5 @@
-import { formatTokens, type PublicPlayer } from "@hotpot/engine";
+import { DEFAULT_THINK_LINES, formatTokens, personaById, type PublicPlayer } from "@hotpot/engine";
+import { useEffect, useState } from "react";
 import { Avatar } from "./Avatar";
 import { CardView } from "./CardView";
 
@@ -7,6 +8,7 @@ export function SeatCapsule({
   you,
   active,
   thinking,
+  thinkRemain,
   place,
   showCards,
 }: {
@@ -14,20 +16,47 @@ export function SeatCapsule({
   you: boolean;
   active: boolean;
   thinking: boolean;
+  thinkRemain: number | null;
   place: "bottom" | "top" | "left" | "right";
   showCards: boolean;
 }) {
   const cards = player.cards;
   const holeKey = cards ? `${cards.hole[0].suit}${cards.hole[0].rank}${cards.hole[1].suit}${cards.hole[1].rank}` : "";
+  const lines = personaById(player.personaId ?? "")?.style.thinkLines ?? DEFAULT_THINK_LINES;
+  const [tick, setTick] = useState(0);
+
+  useEffect(() => {
+    if (!thinking) {
+      setTick(0);
+      return;
+    }
+    const t = window.setInterval(() => setTick((n) => n + 1), 1600);
+    return () => window.clearInterval(t);
+  }, [thinking, player.id]);
+
+  const line = lines[tick % lines.length] ?? lines[0];
+  const seconds = thinkRemain !== null ? Math.max(1, thinkRemain) : null;
+
   return (
     <div
-      className={`seat seat-${place} ${active ? "active" : ""} ${you ? "you" : ""}`}
+      className={`seat seat-${place} ${active ? "active" : ""} ${you ? "you" : ""} ${thinking ? "thinking" : ""}`}
       data-player-id={player.id}
     >
       {showCards && cards ? (
         <div className="seat-cards" key={holeKey}>
           <CardView card={cards.hole[0]} tilt={-8} compact draw delayMs={0} />
           <CardView card={cards.hole[1]} tilt={8} compact draw delayMs={90} />
+        </div>
+      ) : null}
+      {thinking ? (
+        <div className="think-bubble" aria-live="polite">
+          <span className="think-line">{line}</span>
+          <span className="dots" aria-hidden>
+            <i />
+            <i />
+            <i />
+          </span>
+          {seconds !== null ? <em>{seconds}s</em> : null}
         </div>
       ) : null}
       <div className="capsule">
@@ -40,12 +69,6 @@ export function SeatCapsule({
           <div className="capsule-tokens">{formatTokens(player.tokens)} Tokens</div>
         </div>
       </div>
-      {thinking ? (
-        <div className="think">
-          <i />
-          <span>思考中</span>
-        </div>
-      ) : null}
     </div>
   );
 }

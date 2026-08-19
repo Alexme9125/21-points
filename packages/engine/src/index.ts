@@ -1,6 +1,13 @@
 export { makeDeck, cardLabel, rankLabel, isRed, cardKey } from "./cards.js";
 export { formatTokens, initialsFromName } from "./format.js";
-export { LLM_PERSONAS, personaById, type LlmPersona } from "./personas.js";
+export {
+  LLM_PERSONAS,
+  personaById,
+  styleForPersona,
+  DEFAULT_THINK_LINES,
+  type LlmPersona,
+  type PlayStyle,
+} from "./personas.js";
 export { nextRng, shuffleInPlace, pickN } from "./rng.js";
 export { holeKind, holeHint, hintSummary, isAceKing, orderedRanks } from "./rules.js";
 export {
@@ -15,7 +22,7 @@ export {
   currentPlayer,
   forceAwaiting,
 } from "./table.js";
-export { chooseBotAction, botThinkMs } from "./bot.js";
+export { chooseBotAction, botThinkMs, evaluateSpot } from "./bot.js";
 export {
   DEFAULT_CONFIG,
   POOL_NAME,
@@ -34,6 +41,7 @@ export {
   type HoleHint,
   type BetRange,
   type RevealOutcome,
+  type OutcomeKind,
   type Settlement,
   type LogEntry,
 } from "./types.js";

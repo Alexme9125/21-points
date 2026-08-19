@@ -1,5 +1,5 @@
+import { DEFAULT_CONFIG, formatTokens } from "@hotpot/engine";
 import { useState } from "react";
-import { RulesModal } from "./RulesModal";
 
 export function Lobby({
   name,
@@ -9,6 +9,7 @@ export function Lobby({
   onPve,
   onCreatePvp,
   onJoin,
+  onOpenRules,
 }: {
   name: string;
   onName: (v: string) => void;
@@ -17,14 +18,16 @@ export function Lobby({
   onPve: () => void;
   onCreatePvp: () => void;
   onJoin: (code: string) => void;
+  onOpenRules: () => void;
 }) {
   const [code, setCode] = useState("");
-  const [rules, setRules] = useState(false);
 
   return (
     <div className="lobby">
       <header className="lobby-hero">
-        <p className="eyebrow">No-Limit · 5K / 50K Tokens</p>
+        <p className="eyebrow">
+          底注 {formatTokens(DEFAULT_CONFIG.ante)}/人 · 最小添菜 {formatTokens(DEFAULT_CONFIG.minAdd)}
+        </p>
         <h1>吃火锅</h1>
         <p className="lede">把筹码投进许愿池。区间内吃进，牛角尖加倍，三张通吃。</p>
       </header>
@@ -53,11 +56,10 @@ export function Lobby({
             </button>
           </div>
         </div>
-        <button className="link" onClick={() => setRules(true)}>
+        <button className="link" onClick={onOpenRules}>
           查看规则
         </button>
       </section>
-      <RulesModal open={rules} onClose={() => setRules(false)} />
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Lobby } from "./Lobby";
+import { RulesModal } from "./RulesModal";
 import { TableView } from "./TableView";
 import {
   connectRoom,
@@ -11,6 +12,17 @@ import {
   savedName,
   type RoomSnapshot,
 } from "./api";
+import { armSoundUnlock } from "./sound";
+
+const RULES_KEY = "hotpot.rulesSeen";
+
+function unreadRules(): boolean {
+  try {
+    return localStorage.getItem(RULES_KEY) !== "1";
+  } catch {
+    return true;
+  }
+}
 
 export function App() {
   const [name, setName] = useState(savedName() || "玩家");
@@ -18,7 +30,12 @@ export function App() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(Date.now());
+  const [rulesOpen, setRulesOpen] = useState(unreadRules);
   const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    armSoundUnlock();
+  }, []);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 250);
@@ -89,30 +106,51 @@ export function App() {
     setRoom(null);
   }
 
+  function dismissRules() {
+    try {
+      localStorage.setItem(RULES_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setRulesOpen(false);
+  }
+
+  const rules = (
+    <RulesModal open={rulesOpen} onClose={dismissRules} />
+  );
+
   if (!room) {
     return (
-      <Lobby
-        name={name}
-        onName={setName}
-        busy={busy}
-        error={error}
-        onPve={() => enter("pve")}
-        onCreatePvp={() => enter("pvp")}
-        onJoin={(code) => enter("pvp", code)}
-      />
+      <>
+        <Lobby
+          name={name}
+          onName={setName}
+          busy={busy}
+          error={error}
+          onPve={() => enter("pve")}
+          onCreatePvp={() => enter("pvp")}
+          onJoin={(code) => enter("pvp", code)}
+          onOpenRules={() => setRulesOpen(true)}
+        />
+        {rules}
+      </>
     );
   }
 
   return (
-    <TableView
-      room={room}
-      now={now}
-      error={error}
-      onFold={() => send({ type: "action", action: { type: "fold" } })}
-      onAdd={(amount) => send({ type: "action", action: { type: "add", amount } })}
-      onContinue={() => send({ type: "continue" })}
-      onLeave={exit}
-      onFillBots={() => send({ type: "fill_bots" })}
-    />
+    <>
+      <TableView
+        room={room}
+        now={now}
+        error={error}
+        onFold={() => send({ type: "action", action: { type: "fold" } })}
+        onAdd={(amount) => send({ type: "action", action: { type: "add", amount } })}
+        onContinue={() => send({ type: "continue" })}
+        onLeave={exit}
+        onFillBots={() => send({ type: "fill_bots" })}
+        onOpenRules={() => setRulesOpen(true)}
+      />
+      {rules}
+    </>
   );
 }

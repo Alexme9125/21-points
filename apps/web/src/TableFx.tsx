@@ -1,5 +1,6 @@
 import type { PublicState, RevealOutcome } from "@hotpot/engine";
 import { useEffect, useRef, useState } from "react";
+import { playOutcome } from "./sound";
 
 interface Ball {
   id: number;
@@ -96,8 +97,9 @@ export function TableFx({ state }: { state: PublicState | null }) {
     const pool = host.parentElement?.querySelector("[data-pool]");
     const seats = host.parentElement?.querySelectorAll("[data-player-id]");
     if (!pool || !seats?.length) return;
+    shout(pool, "底注", "ante");
     seats.forEach((seat, i) => {
-      window.setTimeout(() => fly(seat, pool, 3), i * 80);
+      window.setTimeout(() => fly(seat, pool, 4), i * 90);
     });
     // Only on new hand.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -113,6 +115,9 @@ export function TableFx({ state }: { state: PublicState | null }) {
     const outcome = state.outcome;
     const slogan = sloganFor(outcome);
     if (slogan) shout(seat, slogan.text, slogan.tone);
+    if (outcome.kind !== "fold" && outcome.kind !== "consecutive") {
+      playOutcome(outcome.kind);
+    }
 
     const kind = outcome.kind;
     const n = chipCount(outcome.amount || state.config.minAdd);

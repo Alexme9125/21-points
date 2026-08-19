@@ -1,4 +1,4 @@
-import { formatTokens, type PublicPlayer } from "@hotpot/engine";
+import { DEFAULT_CONFIG, formatTokens, type PublicPlayer } from "@hotpot/engine";
 import { useEffect, useState } from "react";
 import { ActionBar } from "./ActionBar";
 import { CardView } from "./CardView";
@@ -7,6 +7,7 @@ import { SeatCapsule } from "./SeatCapsule";
 import { SettlementModal } from "./SettlementModal";
 import { TableFx } from "./TableFx";
 import type { RoomSnapshot } from "./api";
+import { isSoundOn, setSoundOn, unlockSound } from "./sound";
 
 const PLACES = ["bottom", "right", "top", "left"] as const;
 
@@ -35,6 +36,7 @@ export function TableView({
   onContinue,
   onLeave,
   onFillBots,
+  onOpenRules,
 }: {
   room: RoomSnapshot;
   now: number;
@@ -44,6 +46,7 @@ export function TableView({
   onContinue: () => void;
   onLeave: () => void;
   onFillBots: () => void;
+  onOpenRules: () => void;
 }) {
   const state = room.state;
   const seats = state?.players ?? room.seats.map((s) => ({
@@ -51,7 +54,7 @@ export function TableView({
     name: s.name,
     kind: s.kind,
     personaId: s.personaId,
-    tokens: 500_000,
+    tokens: (state?.config.startingTokens ?? DEFAULT_CONFIG.startingTokens) - (state?.config.ante ?? 0),
     inHand: true,
   })) as PublicPlayer[];
   const youIndex = Math.max(0, seats.findIndex((p) => p.id === room.you));
@@ -59,6 +62,7 @@ export function TableView({
   const yourTurn = Boolean(state && state.phase === "awaiting" && state.currentPlayerId === room.you);
   const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}`;
   const [lockedTurn, setLockedTurn] = useState("");
+  const [sound, setSound] = useState(isSoundOn);
   useEffect(() => {
     if (state?.phase !== "awaiting") setLockedTurn("");
   }, [state?.phase, turnKey]);
@@ -66,13 +70,17 @@ export function TableView({
   const prevId = state ? previousPlayerId(seats, state.currentIndex) : null;
   const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}`;
   const maxDeals = state?.config.dealsUntilSplit ?? 40;
+  const ante = state?.config.ante ?? DEFAULT_CONFIG.ante;
+  const minAdd = state?.config.minAdd ?? DEFAULT_CONFIG.minAdd;
 
   return (
     <div className="table-page">
       <header className="topbar">
         <div>
           <strong>吃火锅</strong>
-          <span>5K / 50K Tokens</span>
+          <span>
+            底注 {formatTokens(ante)}/人 · 最小 {formatTokens(minAdd)}
+          </span>
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
@@ -81,6 +89,22 @@ export function TableView({
         <div className="top-right">
           <em>{room.status}</em>
           {remain !== null && state?.phase === "awaiting" ? <span className="timer">{remain}s</span> : null}
+          <button
+            className={`text-btn sound-btn ${sound ? "on" : "off"}`}
+            type="button"
+            aria-pressed={sound}
+            onClick={() => {
+              const next = !sound;
+              setSoundOn(next);
+              setSound(next);
+              if (next) void unlockSound();
+            }}
+          >
+            {sound ? "音效开" : "音效关"}
+          </button>
+          <button className="text-btn" type="button" onClick={onOpenRules}>
+            规则
+          </button>
           <code>{room.code}</code>
           <button className="text-btn" onClick={onLeave}>
             离开
@@ -111,7 +135,7 @@ export function TableView({
                 <span />
               </div>
               <div>
-                <small>许愿池</small>
+                <small>许愿池 · 底注 {formatTokens(ante)}/人</small>
                 <b>{formatTokens(state?.projectPool ?? 0)}</b>
               </div>
             </div>
@@ -129,13 +153,15 @@ export function TableView({
             }
             const isCurrent = state?.currentPlayerId === player.id;
             const isPrev = prevId === player.id && prevId !== state?.currentPlayerId;
+            const botThinking = Boolean(state?.phase === "awaiting" && isCurrent && player.kind === "bot");
             return (
               <SeatCapsule
                 key={player.id}
                 player={player}
                 you={player.id === room.you}
                 active={Boolean(isCurrent)}
-                thinking={state?.phase === "awaiting" && isCurrent && player.kind === "bot"}
+                thinking={botThinking}
+                thinkRemain={botThinking ? remain : null}
                 place={place}
                 showCards={Boolean(player.cards && (isCurrent || isPrev))}
               />

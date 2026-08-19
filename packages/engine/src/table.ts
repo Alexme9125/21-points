@@ -250,17 +250,18 @@ export function computeBetRange(state: TableState): BetRange | null {
 
 export function createTable(
   players: Array<Pick<Player, "id" | "name" | "kind" | "personaId">>,
-  config: TableConfig = DEFAULT_CONFIG,
+  config?: TableConfig,
   seed = Date.now() % 0x7fffffff,
 ): TableState {
-  if (players.length !== config.seatCount) {
-    throw new Error(`需要 ${config.seatCount} 名玩家`);
+  const resolved: TableConfig = { ...DEFAULT_CONFIG, ...config };
+  if (players.length !== resolved.seatCount) {
+    throw new Error(`需要 ${resolved.seatCount} 名玩家`);
   }
   return {
-    config,
+    config: resolved,
     players: players.map((p) => ({
       ...p,
-      tokens: config.startingTokens,
+      tokens: resolved.startingTokens,
       inHand: false,
     })),
     phase: "idle",
@@ -295,16 +296,17 @@ export function startHand(state: TableState): TableState {
   next.handNumber += 1;
 
   const tokensAtHandStart: Record<string, number> = {};
+  const ante = next.config.ante;
   for (const p of next.players) {
     tokensAtHandStart[p.id] = p.tokens;
-    if (p.tokens >= next.config.ante) {
-      p.tokens -= next.config.ante;
-      next.projectPool += next.config.ante;
+    if (ante > 0 && p.tokens >= ante) {
+      p.tokens -= ante;
+      next.projectPool += ante;
       p.inHand = true;
-      pushLog(next, "ante", `${p.name} 向${POOL_NAME}投入 ${formatTokens(next.config.ante)} Tokens`, {
+      pushLog(next, "ante", `${p.name} 向${POOL_NAME}投入底注 ${formatTokens(ante)} Tokens`, {
         playerId: p.id,
         name: p.name,
-        amount: next.config.ante,
+        amount: ante,
       });
     } else {
       p.inHand = false;
