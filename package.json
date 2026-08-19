@@ -1,0 +1,24 @@
+{
+  "name": "agent-eating-hotpot",
+  "private": true,
+  "version": "1.0.0",
+  "description": "武汉吃火锅（癞子山庄）网页对战",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "build": "npm run build -w @hotpot/engine && npm run build -w @hotpot/web && npm run build -w @hotpot/server",
+    "dev": "npm run build -w @hotpot/engine && concurrently -n engine,server,web -c cyan,green,magenta \"npm run build:watch -w @hotpot/engine\" \"npm run dev -w @hotpot/server\" \"npm run dev -w @hotpot/web\"",
+    "start": "npm run start -w @hotpot/server",
+    "test": "npm test -w @hotpot/engine",
+    "lint": "npm run build -w @hotpot/engine && npm run build -w @hotpot/web"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "typescript": "^5.8.2"
+  }
+}
