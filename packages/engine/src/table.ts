@@ -15,7 +15,7 @@ import type {
   TableConfig,
   TableState,
 } from "./types.js";
-import { DEFAULT_CONFIG } from "./types.js";
+import { DEFAULT_CONFIG, POOL_NAME } from "./types.js";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -122,7 +122,7 @@ function splitPool(state: TableState): void {
   pushLog(
     state,
     "split",
-    `满 ${state.config.dealsUntilSplit} 次发牌，项目池一半平分，每人 ${formatTokens(each)} Tokens`,
+    `满 ${state.config.dealsUntilSplit} 次发牌，${POOL_NAME}一半平分，每人 ${formatTokens(each)} Tokens`,
     { amount: each },
   );
   settle(state, "split", { splitEach: each });
@@ -130,7 +130,7 @@ function splitPool(state: TableState): void {
 
 function maybeEndBeforeDeal(state: TableState): boolean {
   if (state.projectPool <= 0) {
-    pushLog(state, "pool_empty", "项目池已被清空");
+    pushLog(state, "pool_empty", `${POOL_NAME}已被清空`);
     settle(state, "empty");
     return true;
   }
@@ -301,7 +301,7 @@ export function startHand(state: TableState): TableState {
       p.tokens -= next.config.ante;
       next.projectPool += next.config.ante;
       p.inHand = true;
-      pushLog(next, "ante", `${p.name} 向项目池投入 ${formatTokens(next.config.ante)} Tokens`, {
+      pushLog(next, "ante", `${p.name} 向${POOL_NAME}投入 ${formatTokens(next.config.ante)} Tokens`, {
         playerId: p.id,
         name: p.name,
         amount: next.config.ante,
@@ -369,7 +369,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
 
   const third = draw(next);
   next.third = third;
-  pushLog(next, "add", `${actor.name} 向项目池添菜 ${formatTokens(amount)} Tokens`, {
+  pushLog(next, "add", `${actor.name} 向${POOL_NAME}添菜 ${formatTokens(amount)} Tokens`, {
     playerId: actor.id,
     name: actor.name,
     amount,
@@ -382,7 +382,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
     if (third.rank === hole[0].rank) {
       const won = transferFromPool(next, actor, next.projectPool);
       outcome = { kind: "triple_win", amount: won, third };
-      pushLog(next, "triple_win", `${actor.name} 开出三张，通吃项目池 ${formatTokens(won)} Tokens`, {
+      pushLog(next, "triple_win", `${actor.name} 开出三张，通吃${POOL_NAME} ${formatTokens(won)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
         amount: won,
@@ -405,13 +405,13 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
       pushLog(
         next,
         "horn",
-        `${actor.name} 钻了牛角尖（×${multiplier}），扣除 ${formatTokens(lost)} Tokens`,
+        `${actor.name} 钻了${multiplier === 4 ? "超级牛角尖" : "牛角尖"}（×${multiplier}），扣除 ${formatTokens(lost)} Tokens`,
         { playerId: actor.id, name: actor.name, amount: lost },
       );
     } else if (third.rank > low && third.rank < high) {
       const won = transferFromPool(next, actor, amount);
       outcome = { kind: "win", amount: won, third };
-      pushLog(next, "win", `${actor.name} 吃进项目池 ${formatTokens(won)} Tokens`, {
+      pushLog(next, "win", `${actor.name} 吃进${POOL_NAME} ${formatTokens(won)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
         amount: won,
@@ -419,7 +419,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
     } else {
       const lost = transferToPool(next, actor, amount);
       outcome = { kind: "lose", amount: lost, third };
-      pushLog(next, "lose", `${actor.name} 未中区间，投入 ${formatTokens(lost)} Tokens`, {
+      pushLog(next, "lose", `${actor.name} 未中区间，投入${POOL_NAME} ${formatTokens(lost)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
         amount: lost,

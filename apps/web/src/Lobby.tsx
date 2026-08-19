@@ -24,9 +24,9 @@ export function Lobby({
   return (
     <div className="lobby">
       <header className="lobby-hero">
-        <p className="eyebrow">No-Limit · 5K / 10K Tokens</p>
+        <p className="eyebrow">No-Limit · 5K / 50K Tokens</p>
         <h1>吃火锅</h1>
-        <p className="lede">把筹码投进项目池。区间内吃进，牛角尖加倍，三张通吃。</p>
+        <p className="lede">把筹码投进许愿池。区间内吃进，牛角尖加倍，三张通吃。</p>
       </header>
       <section className="panel">
         <label>

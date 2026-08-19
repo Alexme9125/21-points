@@ -50,7 +50,7 @@ export function holeHint(a: Card, b: Card): HoleHint {
 export function hintSummary(hint: HoleHint): string {
   if (hint.kind === "consecutive") return "连张，系统自动放弃";
   if (hint.kind === "pair") {
-    return `三张：再开出 ${rankLabel(hint.hornRanks[0]!)} 可通吃项目池`;
+    return `三张：再开出 ${rankLabel(hint.hornRanks[0]!)} 可通吃许愿池`;
   }
   const wins = hint.winRanks.map(rankLabel).join("、") || "无";
   const horns = hint.hornRanks.map(rankLabel).join("、");

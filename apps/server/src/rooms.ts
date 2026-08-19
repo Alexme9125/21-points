@@ -56,7 +56,7 @@ interface Room {
 }
 
 const rooms = new Map<string, Room>();
-const TURN_MS = 20_000;
+const TURN_MS = 30_000;
 
 function statusText(room: Room): string {
   if (!room.table) {
@@ -72,10 +72,10 @@ function statusText(room: Room): string {
   if (table.phase === "reveal") {
     const kind = table.outcome?.kind;
     if (kind === "consecutive") return "连张，自动放弃";
-    if (kind === "horn") return "牛角尖！";
+    if (kind === "horn") return table.outcome?.multiplier === 4 ? "超级牛角尖！" : "牛角尖！";
     if (kind === "triple_win") return "三张通吃！";
-    if (kind === "win") return "吃进项目池";
-    if (kind === "lose" || kind === "triple_lose") return "投入项目池";
+    if (kind === "win") return "爽吃许愿池";
+    if (kind === "lose" || kind === "triple_lose") return "挨饿";
     return "结算中";
   }
   if (table.phase === "settlement") return "本盘结束";
@@ -205,7 +205,12 @@ function schedule(room: Room): void {
   }
 
   if (table.phase === "reveal") {
-    const delay = table.outcome?.kind === "consecutive" || table.outcome?.kind === "fold" ? 1_150 : 1_850;
+    const delay =
+      table.outcome?.kind === "fold"
+        ? 1_400
+        : table.outcome?.kind === "consecutive"
+          ? 2_000
+          : 2_600;
     room.timers.advance = setTimeout(() => {
       room.table = advance(room.table!);
       broadcast(room);

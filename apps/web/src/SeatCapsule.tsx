@@ -8,21 +8,26 @@ export function SeatCapsule({
   active,
   thinking,
   place,
+  showCards,
 }: {
   player: PublicPlayer;
   you: boolean;
   active: boolean;
   thinking: boolean;
   place: "bottom" | "top" | "left" | "right";
+  showCards: boolean;
 }) {
   const cards = player.cards;
-  const showCards = Boolean(cards && (you || active || cards.outcome));
+  const holeKey = cards ? `${cards.hole[0].suit}${cards.hole[0].rank}${cards.hole[1].suit}${cards.hole[1].rank}` : "";
   return (
-    <div className={`seat seat-${place} ${active ? "active" : ""} ${you ? "you" : ""}`}>
+    <div
+      className={`seat seat-${place} ${active ? "active" : ""} ${you ? "you" : ""}`}
+      data-player-id={player.id}
+    >
       {showCards && cards ? (
-        <div className="seat-cards">
-          <CardView card={cards.hole[0]} tilt={-8} compact />
-          <CardView card={cards.hole[1]} tilt={8} compact />
+        <div className="seat-cards" key={holeKey}>
+          <CardView card={cards.hole[0]} tilt={-8} compact draw delayMs={0} />
+          <CardView card={cards.hole[1]} tilt={8} compact draw delayMs={90} />
         </div>
       ) : null}
       <div className="capsule">

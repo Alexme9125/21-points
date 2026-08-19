@@ -122,11 +122,11 @@ describe("table flow", () => {
     expect(state.projectPool).toBeGreaterThanOrEqual(DEFAULT_CONFIG.ante * 2);
   });
 
-  it("splits half the pool after 20 deals", () => {
+  it("splits half the pool after the configured number of deals", () => {
     let state = createTable(fourPlayers(), DEFAULT_CONFIG, 7);
     state = startHand(state);
     let guard = 0;
-    while (state.phase !== "settlement" && state.phase !== "gameover" && guard < 80) {
+    while (state.phase !== "settlement" && state.phase !== "gameover" && guard < 240) {
       guard += 1;
       if (state.phase === "awaiting") {
         const id = state.players[state.currentIndex]!.id;
@@ -140,7 +140,13 @@ describe("table flow", () => {
     expect(state.projectPool).toBeGreaterThan(0);
   });
 
-  it("collects 10K ante from each player into the project pool", () => {
+  it("uses a 50K ante and 40 deals before splitting", () => {
+    expect(DEFAULT_CONFIG.ante).toBe(50_000);
+    expect(DEFAULT_CONFIG.dealsUntilSplit).toBe(40);
+    expect(DEFAULT_CONFIG.minAdd).toBe(5_000);
+  });
+
+  it("collects 50K ante from each player into the wish pool", () => {
     let state = createTable(fourPlayers(), DEFAULT_CONFIG, 3);
     state = startHand(state);
     expect(state.players.every((p) => p.tokens === DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante)).toBe(

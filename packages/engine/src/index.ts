@@ -18,6 +18,7 @@ export {
 export { chooseBotAction, botThinkMs } from "./bot.js";
 export {
   DEFAULT_CONFIG,
+  POOL_NAME,
   RANK_LABELS,
   type Card,
   type Rank,

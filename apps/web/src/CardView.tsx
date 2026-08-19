@@ -1,4 +1,4 @@
-import { isRed, rankLabel, type Card } from "@hotpot/engine";
+import { cardKey, isRed, rankLabel, type Card } from "@hotpot/engine";
 
 function SuitIcon({ suit }: { suit: Card["suit"] }) {
   const d =
@@ -20,16 +20,21 @@ export function CardView({
   card,
   tilt = 0,
   compact,
+  draw = false,
+  delayMs = 0,
 }: {
   card: Card;
   tilt?: number;
   compact?: boolean;
+  draw?: boolean;
+  delayMs?: number;
 }) {
   const red = isRed(card.suit);
   return (
     <div
-      className={`playing-card ${red ? "red" : "black"} ${compact ? "compact" : ""}`}
-      style={{ transform: `rotate(${tilt}deg)` }}
+      key={cardKey(card)}
+      className={`playing-card ${red ? "red" : "black"} ${compact ? "compact" : ""} ${draw ? "draw" : ""}`}
+      style={{ ["--tilt" as string]: `${tilt}deg`, ["--draw-delay" as string]: `${delayMs}ms` }}
     >
       <div className="corner">
         <b>{rankLabel(card.rank)}</b>
@@ -38,14 +43,6 @@ export function CardView({
       <div className="center-suit">
         <SuitIcon suit={card.suit} />
       </div>
-    </div>
-  );
-}
-
-export function CardBack({ tilt = 0 }: { tilt?: number }) {
-  return (
-    <div className="playing-card back" style={{ transform: `rotate(${tilt}deg)` }}>
-      <div className="back-mark" />
     </div>
   );
 }

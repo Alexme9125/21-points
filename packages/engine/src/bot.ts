@@ -51,5 +51,5 @@ export function chooseBotAction(state: TableState): PlayerAction {
 }
 
 export function botThinkMs(rngValue: number): number {
-  return Math.round(600 + rngValue * 800);
+  return Math.round(2400 + rngValue * 1600);
 }

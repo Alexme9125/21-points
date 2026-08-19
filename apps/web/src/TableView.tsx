@@ -5,6 +5,7 @@ import { CardView } from "./CardView";
 import { HintBar } from "./HintBar";
 import { SeatCapsule } from "./SeatCapsule";
 import { SettlementModal } from "./SettlementModal";
+import { TableFx } from "./TableFx";
 import type { RoomSnapshot } from "./api";
 
 const PLACES = ["bottom", "right", "top", "left"] as const;
@@ -12,6 +13,17 @@ const PLACES = ["bottom", "right", "top", "left"] as const;
 function placeFor(viewerIndex: number, seatIndex: number, count: number): (typeof PLACES)[number] {
   const offset = (seatIndex - viewerIndex + count) % count;
   return PLACES[offset] ?? "bottom";
+}
+
+function previousPlayerId(players: PublicPlayer[], currentIndex: number): string | null {
+  if (players.length === 0) return null;
+  const n = players.length;
+  for (let step = 1; step < n; step++) {
+    const idx = (currentIndex - step + n) % n;
+    const p = players[idx];
+    if (p?.inHand) return p.id;
+  }
+  return null;
 }
 
 export function TableView({
@@ -51,16 +63,20 @@ export function TableView({
     if (state?.phase !== "awaiting") setLockedTurn("");
   }, [state?.phase, turnKey]);
 
+  const prevId = state ? previousPlayerId(seats, state.currentIndex) : null;
+  const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}`;
+  const maxDeals = state?.config.dealsUntilSplit ?? 40;
+
   return (
     <div className="table-page">
       <header className="topbar">
         <div>
           <strong>吃火锅</strong>
-          <span>5K / 10K Tokens</span>
+          <span>5K / 50K Tokens</span>
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
-          {state ? `第 ${state.handNumber} 盘 · 发牌 ${state.dealsThisHand}/20` : "等待开局"}
+          {state ? `第 ${state.handNumber} 盘 · 发牌 ${state.dealsThisHand}/${maxDeals}` : "等待开局"}
         </div>
         <div className="top-right">
           <em>{room.status}</em>
@@ -76,22 +92,26 @@ export function TableView({
         <div className="felt">
           <div className="board">
             {state?.hole ? (
-              <div className="board-cards">
-                <CardView card={state.hole[0]} tilt={-6} />
-                <CardView card={state.hole[1]} tilt={6} />
-                {state.third ? <CardView card={state.third} tilt={0} /> : <div className="ghost-card" />}
+              <div className="board-cards" key={drawKey}>
+                <CardView card={state.hole[0]} tilt={-6} draw delayMs={0} />
+                <CardView card={state.hole[1]} tilt={6} draw delayMs={90} />
+                {state.third ? (
+                  <CardView card={state.third} tilt={0} draw delayMs={40} />
+                ) : (
+                  <div className="ghost-card" />
+                )}
               </div>
             ) : (
               <div className="waiting-copy">{room.started ? "准备发牌" : "等待玩家入座"}</div>
             )}
-            <div className="pool">
+            <div className="pool" data-pool>
               <div className="chips" aria-hidden>
                 <span />
                 <span />
                 <span />
               </div>
               <div>
-                <small>项目池</small>
+                <small>许愿池</small>
                 <b>{formatTokens(state?.projectPool ?? 0)}</b>
               </div>
             </div>
@@ -107,17 +127,21 @@ export function TableView({
                 </div>
               );
             }
+            const isCurrent = state?.currentPlayerId === player.id;
+            const isPrev = prevId === player.id && prevId !== state?.currentPlayerId;
             return (
               <SeatCapsule
                 key={player.id}
                 player={player}
                 you={player.id === room.you}
-                active={state?.currentPlayerId === player.id}
-                thinking={state?.phase === "awaiting" && state.currentPlayerId === player.id && player.kind === "bot"}
+                active={Boolean(isCurrent)}
+                thinking={state?.phase === "awaiting" && isCurrent && player.kind === "bot"}
                 place={place}
+                showCards={Boolean(player.cards && (isCurrent || isPrev))}
               />
             );
           })}
+          <TableFx state={state} />
         </div>
       </div>
 

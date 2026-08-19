@@ -47,13 +47,15 @@ export interface TableConfig {
 
 export const DEFAULT_CONFIG: TableConfig = {
   startingTokens: 500_000,
-  ante: 10_000,
+  ante: 50_000,
   minAdd: 5_000,
   maxAdd: 100_000,
   maxLoss: 200_000,
   seatCount: 4,
-  dealsUntilSplit: 20,
+  dealsUntilSplit: 40,
 };
+
+export const POOL_NAME = "许愿池";
 
 export type Phase = "idle" | "awaiting" | "reveal" | "settlement" | "gameover";
 

@@ -14,7 +14,11 @@ export function SettlementModal({
   const settlement = state.settlement;
   if (!settlement || (state.phase !== "settlement" && state.phase !== "gameover")) return null;
   const title =
-    settlement.reason === "empty" ? "项目池已被清空" : settlement.reason === "split" ? "满 20 次发牌，摊池" : "对局结束";
+    settlement.reason === "empty"
+      ? "许愿池已被清空"
+      : settlement.reason === "split"
+        ? `满 ${state.config.dealsUntilSplit} 次发牌，摊池`
+        : "对局结束";
   return (
     <div className="overlay">
       <div className="modal">
@@ -34,7 +38,7 @@ export function SettlementModal({
           })}
         </ul>
         <p className="muted">
-          项目池剩余 {formatTokens(settlement.leftoverPool)} Tokens
+          许愿池剩余 {formatTokens(settlement.leftoverPool)} Tokens
           {settlement.splitEach ? ` · 每人分得 ${formatTokens(settlement.splitEach)}` : ""}
         </p>
         <div className="row">
