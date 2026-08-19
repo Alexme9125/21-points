@@ -9,6 +9,7 @@ import {
   DEFAULT_CONFIG,
   LLM_PERSONAS,
   pickN,
+  revealHoldMs,
   startHand,
   toPublicState,
   type PlayerAction,
@@ -207,12 +208,7 @@ function schedule(room: Room): void {
   }
 
   if (table.phase === "reveal") {
-    const delay =
-      table.outcome?.kind === "fold"
-        ? 2_200
-        : table.outcome?.kind === "consecutive"
-          ? 2_800
-          : 3_400;
+    const delay = revealHoldMs(table.outcome?.kind ?? "fold");
     room.timers.advance = setTimeout(() => {
       room.table = advance(room.table!);
       broadcast(room);

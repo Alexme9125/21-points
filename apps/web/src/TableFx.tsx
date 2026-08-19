@@ -1,6 +1,6 @@
-import type { PublicState, RevealOutcome } from "@hotpot/engine";
+import type { PublicState, RevealFxStage, RevealOutcome } from "@hotpot/engine";
 import { useEffect, useRef, useState } from "react";
-import { playOutcome } from "./sound";
+import { playOutcome, playWager } from "./sound";
 
 interface Ball {
   id: number;
@@ -41,9 +41,16 @@ function chipCount(amount: number): number {
   return Math.min(8, Math.max(4, Math.round(amount / 12_000)));
 }
 
-export function TableFx({ state }: { state: PublicState | null }) {
+export function TableFx({
+  state,
+  stage,
+}: {
+  state: PublicState | null;
+  stage: RevealFxStage;
+}) {
   const hostRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
+  const fired = useRef("");
   const [balls, setBalls] = useState<Ball[]>([]);
   const [slogans, setSlogans] = useState<Slogan[]>([]);
 
@@ -106,29 +113,42 @@ export function TableFx({ state }: { state: PublicState | null }) {
   }, [handKey]);
 
   useEffect(() => {
-    if (!state?.outcome || !state.currentPlayerId) return;
+    const fireKey = `${outcomeKey}:${stage}`;
+    if (!state?.outcome || !state.currentPlayerId || !fireKey || fired.current === fireKey) return;
+    fired.current = fireKey;
+
     const host = hostRef.current;
     if (!host) return;
     const root = host.parentElement;
     const pool = root?.querySelector("[data-pool]");
     const seat = root?.querySelector(`[data-player-id="${state.currentPlayerId}"]`);
     const outcome = state.outcome;
-    const slogan = sloganFor(outcome);
-    if (slogan) shout(seat, slogan.text, slogan.tone);
-    if (outcome.kind !== "fold" && outcome.kind !== "consecutive") {
-      playOutcome(outcome.kind);
+    const wager = outcome.wager ?? 0;
+    const kind = outcome.kind;
+
+    if (stage === "wager" && wager > 0) {
+      fly(seat, pool, chipCount(wager));
+      playWager();
+      return;
     }
 
-    const kind = outcome.kind;
-    const n = chipCount(outcome.amount || state.config.minAdd);
-    if (kind === "win" || kind === "triple_win") {
-      fly(seat, pool, 4);
-      window.setTimeout(() => fly(pool, seat, kind === "triple_win" ? 8 : n), 380);
-    } else if (kind === "lose" || kind === "triple_lose" || kind === "horn") {
-      fly(seat, pool, kind === "horn" ? n + 2 : n);
+    if (stage === "result") {
+      const slogan = sloganFor(outcome);
+      if (slogan) shout(seat, slogan.text, slogan.tone);
+      if (kind !== "fold" && kind !== "consecutive") playOutcome(kind);
+      return;
+    }
+
+    if (stage === "payout") {
+      if (kind === "win" || kind === "triple_win") {
+        fly(pool, seat, kind === "triple_win" ? 10 : chipCount(wager + outcome.amount));
+      } else if (kind === "horn") {
+        const extra = outcome.amount - wager;
+        if (extra > 0) fly(seat, pool, chipCount(extra));
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [outcomeKey]);
+  }, [stage, outcomeKey]);
 
   return (
     <div className="fx-layer" ref={hostRef}>

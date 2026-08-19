@@ -104,6 +104,17 @@ export function playOutcome(kind: OutcomeKind): void {
   })();
 }
 
+export function playWager(): void {
+  if (!enabled) return;
+  void (async () => {
+    await unlockSound();
+    if (!enabled || !ctx || ctx.state !== "running") return;
+    const t = ctx.currentTime + 0.01;
+    beep(880, t, 0.05, "triangle", 0.04);
+    beep(660, t + 0.05, 0.07, "sine", 0.035, 520);
+  })();
+}
+
 export function armSoundUnlock(): void {
   if (typeof window === "undefined") return;
   const once = () => {

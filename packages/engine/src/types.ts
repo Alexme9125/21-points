@@ -73,6 +73,8 @@ export type OutcomeKind =
 export interface RevealOutcome {
   kind: OutcomeKind;
   amount: number;
+  /** Tokens posted as the add, before win/lose/horn is applied. */
+  wager?: number;
   multiplier?: number;
   third?: Card;
 }

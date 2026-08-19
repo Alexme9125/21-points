@@ -38,6 +38,7 @@ describe("applyAction outcomes", () => {
     state = applyAction(state, "p1", { type: "add", amount: 10_000 });
     expect(state.outcome?.kind).toBe("win");
     expect(state.outcome?.amount).toBe(10_000);
+    expect(state.outcome?.wager).toBe(10_000);
     expect(state.projectPool).toBe(70_000);
     expect(state.players[0]!.tokens).toBe(510_000);
   });
@@ -56,6 +57,7 @@ describe("applyAction outcomes", () => {
     expect(state.outcome?.kind).toBe("horn");
     expect(state.outcome?.multiplier).toBe(2);
     expect(state.outcome?.amount).toBe(20_000);
+    expect(state.outcome?.wager).toBe(10_000);
 
     state = forceAwaiting(fresh(), 0, [c(1), c(13)], [c(13, "hearts")]);
     state = applyAction(state, "p1", { type: "add", amount: 80_000 });
@@ -69,6 +71,7 @@ describe("applyAction outcomes", () => {
     const rangeMin = DEFAULT_CONFIG.minAdd;
     state = applyAction(state, "p1", { type: "add", amount: rangeMin });
     expect(state.outcome?.kind).toBe("triple_win");
+    expect(state.outcome?.wager).toBe(rangeMin);
     expect(state.projectPool).toBe(0);
     expect(state.players[0]!.tokens).toBe(540_000);
   });

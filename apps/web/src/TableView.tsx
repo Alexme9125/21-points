@@ -7,6 +7,7 @@ import { SeatCapsule } from "./SeatCapsule";
 import { SettlementModal } from "./SettlementModal";
 import { TableFx } from "./TableFx";
 import type { RoomSnapshot } from "./api";
+import { useRevealPlay } from "./revealPlay";
 import { isSoundOn, setSoundOn, unlockSound } from "./sound";
 
 const PLACES = ["bottom", "right", "top", "left"] as const;
@@ -49,14 +50,16 @@ export function TableView({
   onOpenRules: () => void;
 }) {
   const state = room.state;
-  const seats = state?.players ?? room.seats.map((s) => ({
-    id: s.id,
-    name: s.name,
-    kind: s.kind,
-    personaId: s.personaId,
-    tokens: (state?.config.startingTokens ?? DEFAULT_CONFIG.startingTokens) - (state?.config.ante ?? 0),
-    inHand: true,
-  })) as PublicPlayer[];
+  const play = useRevealPlay(state, room.status);
+  const seats = (play.players ??
+    room.seats.map((s) => ({
+      id: s.id,
+      name: s.name,
+      kind: s.kind,
+      personaId: s.personaId,
+      tokens: DEFAULT_CONFIG.startingTokens,
+      inHand: true,
+    }))) as PublicPlayer[];
   const youIndex = Math.max(0, seats.findIndex((p) => p.id === room.you));
   const remain = room.deadline ? Math.max(0, Math.ceil((room.deadline - now) / 1000)) : null;
   const yourTurn = Boolean(state && state.phase === "awaiting" && state.currentPlayerId === room.you);
@@ -76,18 +79,18 @@ export function TableView({
   return (
     <div className="table-page">
       <header className="topbar">
-        <div>
+        <div className="top-brand">
           <strong>吃火锅</strong>
-          <span>
+          <span className="stakes">
             底注 {formatTokens(ante)}/人 · 最小 {formatTokens(minAdd)}
           </span>
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
-          {state ? `第 ${state.handNumber} 盘 · 发牌 ${state.dealsThisHand}/${maxDeals}` : "等待开局"}
+          {state ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxDeals}` : "等待开局"}
         </div>
         <div className="top-right">
-          <em>{room.status}</em>
+          <em className="status-text">{play.status}</em>
           {remain !== null && state?.phase === "awaiting" ? <span className="timer">{remain}s</span> : null}
           <button
             className={`text-btn sound-btn ${sound ? "on" : "off"}`}
@@ -113,16 +116,16 @@ export function TableView({
       </header>
 
       <div className="felt-wrap">
-        <div className="felt">
+        <div className={`felt ${play.stage === "wager" ? "posting" : ""}`}>
           <div className="board">
             {state?.hole ? (
               <div className="board-cards" key={drawKey}>
                 <CardView card={state.hole[0]} tilt={-6} draw delayMs={0} />
                 <CardView card={state.hole[1]} tilt={6} draw delayMs={90} />
-                {state.third ? (
-                  <CardView card={state.third} tilt={0} draw delayMs={40} />
+                {play.showThird && state.third ? (
+                  <CardView card={state.third} tilt={0} draw delayMs={0} />
                 ) : (
-                  <div className="ghost-card" />
+                  <div className={`ghost-card ${play.stage === "wager" ? "pending" : ""}`} />
                 )}
               </div>
             ) : (
@@ -136,7 +139,7 @@ export function TableView({
               </div>
               <div>
                 <small>许愿池 · 底注 {formatTokens(ante)}/人</small>
-                <b>{formatTokens(state?.projectPool ?? 0)}</b>
+                <b>{formatTokens(play.pool)}</b>
               </div>
             </div>
             <HintBar hint={state?.hint ?? null} />
@@ -167,7 +170,7 @@ export function TableView({
               />
             );
           })}
-          <TableFx state={state} />
+          <TableFx state={state} stage={play.stage} />
         </div>
       </div>
 
@@ -193,10 +196,10 @@ export function TableView({
             </button>
           </div>
         ) : (
-          <p className="log-line">{state?.logs.at(-1)?.text ?? room.status}</p>
+          <p className="log-line">{play.logs.at(-1)?.text ?? play.status}</p>
         )}
         <div className="log">
-          {(state?.logs ?? []).slice(-4).map((line) => (
+          {play.logs.slice(-4).map((line) => (
             <div key={line.id}>{line.text}</div>
           ))}
         </div>

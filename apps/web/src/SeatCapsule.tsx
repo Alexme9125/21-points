@@ -63,7 +63,7 @@ export function SeatCapsule({
         <Avatar name={player.name} personaId={player.personaId} you={you} />
         <div className="capsule-meta">
           <div className="capsule-name">
-            {you ? "You" : player.name}
+            <span className="who" title={player.name}>{you ? "You" : player.name}</span>
             {!player.inHand ? <span className="tag">旁观</span> : null}
           </div>
           <div className="capsule-tokens">{formatTokens(player.tokens)} Tokens</div>

@@ -29,7 +29,7 @@ export function ActionBar({
 
   return (
     <div className="action-bar">
-      <button className="btn ghost" disabled={disabled} onClick={onFold}>
+      <button className="btn ghost fold-btn" disabled={disabled} onClick={onFold}>
         放弃
       </button>
       <div className="slider-wrap">
@@ -42,10 +42,10 @@ export function ActionBar({
           disabled={disabled || range.locked}
           onChange={(e) => setAmount(Number(e.target.value))}
         />
-        <b>{formatTokens(amount)} Tokens</b>
+        <b>{formatTokens(amount)}</b>
       </div>
-      <button className="btn primary" disabled={disabled} onClick={() => onAdd(amount)}>
-        {range.locked ? "最小添菜（三张）" : "添菜"}
+      <button className="btn primary add-btn" disabled={disabled} onClick={() => onAdd(amount)}>
+        {range.locked ? "最小添菜" : "添菜"}
       </button>
     </div>
   );

@@ -24,6 +24,15 @@ export {
 } from "./table.js";
 export { chooseBotAction, botThinkMs, evaluateSpot } from "./bot.js";
 export {
+  FX_MS,
+  openingRevealStage,
+  revealHoldMs,
+  chipsForStage,
+  shouldShowThird,
+  RESULT_LOG_KINDS,
+  type RevealFxStage,
+} from "./fx.js";
+export {
   DEFAULT_CONFIG,
   POOL_NAME,
   RANK_LABELS,

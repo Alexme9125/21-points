@@ -383,7 +383,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
   if (kind === "pair") {
     if (third.rank === hole[0].rank) {
       const won = transferFromPool(next, actor, next.projectPool);
-      outcome = { kind: "triple_win", amount: won, third };
+      outcome = { kind: "triple_win", amount: won, wager: amount, third };
       pushLog(next, "triple_win", `${actor.name} 开出三张，通吃${POOL_NAME} ${formatTokens(won)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
@@ -391,7 +391,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
       });
     } else {
       const lost = transferToPool(next, actor, amount);
-      outcome = { kind: "triple_lose", amount: lost, third };
+      outcome = { kind: "triple_lose", amount: lost, wager: amount, third };
       pushLog(next, "triple_lose", `${actor.name} 未开出三张，扣除 ${formatTokens(lost)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
@@ -403,7 +403,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
     if (third.rank === hole[0].rank || third.rank === hole[1].rank) {
       const multiplier = isAceKing(hole[0], hole[1]) ? 4 : 2;
       const lost = transferToPool(next, actor, amount * multiplier);
-      outcome = { kind: "horn", amount: lost, multiplier, third };
+      outcome = { kind: "horn", amount: lost, wager: amount, multiplier, third };
       pushLog(
         next,
         "horn",
@@ -412,7 +412,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
       );
     } else if (third.rank > low && third.rank < high) {
       const won = transferFromPool(next, actor, amount);
-      outcome = { kind: "win", amount: won, third };
+      outcome = { kind: "win", amount: won, wager: amount, third };
       pushLog(next, "win", `${actor.name} 吃进${POOL_NAME} ${formatTokens(won)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
@@ -420,7 +420,7 @@ export function applyAction(state: TableState, playerId: string, action: PlayerA
       });
     } else {
       const lost = transferToPool(next, actor, amount);
-      outcome = { kind: "lose", amount: lost, third };
+      outcome = { kind: "lose", amount: lost, wager: amount, third };
       pushLog(next, "lose", `${actor.name} 未中区间，投入${POOL_NAME} ${formatTokens(lost)} Tokens`, {
         playerId: actor.id,
         name: actor.name,
