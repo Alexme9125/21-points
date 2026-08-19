@@ -34,7 +34,7 @@ export function Lobby({
       <section className="panel">
         <label>
           昵称
-          <input value={name} maxLength={16} onChange={(e) => onName(e.target.value)} placeholder="你的名字" />
+          <input value={name} maxLength={16} onChange={(e) => onName(e.target.value)} placeholder="你的名字，桌上会显示" />
         </label>
         {error ? <p className="error">{error}</p> : null}
         <button className="btn primary lg" disabled={busy} onClick={onPve}>

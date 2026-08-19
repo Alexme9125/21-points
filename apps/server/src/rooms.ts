@@ -17,7 +17,7 @@ import {
   type TableState,
 } from "@hotpot/engine";
 import type { WebSocket } from "ws";
-import { roomCode, type Session } from "./session.js";
+import { roomCode, normalizeName, type Session } from "./session.js";
 
 export interface Seat {
   id: string;
@@ -326,6 +326,7 @@ export function attachSocket(session: Session, ws: WebSocket): void {
       const msg = JSON.parse(String(raw)) as {
         type: string;
         action?: PlayerAction;
+        name?: string;
       };
       if (msg.type === "action" && msg.action) {
         play(room, session.playerId, msg.action);
@@ -335,6 +336,8 @@ export function attachSocket(session: Session, ws: WebSocket): void {
         hostStart(room, session.playerId);
       } else if (msg.type === "fill_bots") {
         hostFill(room, session.playerId);
+      } else if (msg.type === "rename") {
+        renamePlayer(room, session, msg.name ?? "");
       }
     } catch (err) {
       send(ws, { type: "error", message: err instanceof Error ? err.message : "行动失败" });
@@ -349,6 +352,18 @@ export function attachSocket(session: Session, ws: WebSocket): void {
       broadcast(room);
     }
   });
+}
+
+function renamePlayer(room: Room, session: Session, name: string): void {
+  const trimmed = normalizeName(name);
+  session.name = trimmed;
+  const seat = room.seats.find((s) => s.id === session.playerId);
+  if (seat?.kind === "human") seat.name = trimmed;
+  if (room.table) {
+    const player = room.table.players.find((p) => p.id === session.playerId);
+    if (player?.kind === "human") player.name = trimmed;
+  }
+  broadcast(room);
 }
 
 function play(room: Room, playerId: string, action: PlayerAction): void {

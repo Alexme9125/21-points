@@ -9,8 +9,12 @@ export interface Session {
 
 const sessions = new Map<string, Session>();
 
+export function normalizeName(name: string): string {
+  return name.trim().slice(0, 16) || "玩家";
+}
+
 export function createSession(name: string, existingToken?: string): Session {
-  const trimmed = name.trim().slice(0, 16) || "玩家";
+  const trimmed = normalizeName(name);
   if (existingToken) {
     const found = sessions.get(existingToken);
     if (found) {

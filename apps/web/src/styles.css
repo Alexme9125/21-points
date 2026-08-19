@@ -186,7 +186,26 @@ em { font-style: normal; color: var(--accent); }
   box-shadow: 0 10px 24px rgba(28, 34, 48, 0.08);
   min-width: 168px;
 }
-.capsule-name { font-weight: 700; display: flex; gap: 6px; align-items: center; min-width: 0; }
+.capsule-name { font-weight: 700; display: flex; gap: 6px; align-items: center; min-width: 0; flex-wrap: wrap; }
+.who-input {
+  width: 92px;
+  min-width: 0;
+  border: 1px solid var(--accent-soft);
+  border-radius: 8px;
+  padding: 2px 6px;
+  font: inherit;
+  font-weight: 700;
+  font-size: 13px;
+}
+.rename-btn {
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font-size: 11px;
+  padding: 0;
+  font-weight: 700;
+}
+.you-tag { color: var(--accent); }
 .capsule-meta { min-width: 0; }
 .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .capsule-tokens { color: var(--muted); font-size: 12px; }
@@ -402,7 +421,8 @@ em { font-style: normal; color: var(--accent); }
   .seat-left { left: 4px; top: 38%; }
   .seat-right { right: 4px; top: 38%; }
   .capsule { min-width: 0; width: 100%; padding: 4px 8px 4px 4px; }
-  .capsule-name { max-width: 72px; font-size: 12px; }
+  .capsule-name { max-width: 88px; font-size: 12px; }
+  .who-input { font-size: 16px; width: 96px; }
   .capsule-tokens { font-size: 11px; }
   .avatar { width: 28px; height: 28px; }
   .think-bubble { font-size: 11px; max-width: 118px; padding: 4px 8px; gap: 5px; }

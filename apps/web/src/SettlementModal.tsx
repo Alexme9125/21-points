@@ -28,7 +28,10 @@ export function SettlementModal({
             const d = settlement.deltas[p.id] ?? 0;
             return (
               <li key={p.id} className={p.id === you ? "me" : ""}>
-                <span>{p.id === you ? "You" : p.name}</span>
+                <span>
+                  {p.name}
+                  {p.id === you ? "（你）" : ""}
+                </span>
                 <b className={d >= 0 ? "up" : "down"}>
                   {d >= 0 ? "+" : ""}
                   {formatTokens(d)}

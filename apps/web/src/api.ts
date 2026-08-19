@@ -35,6 +35,10 @@ export function savedName(): string {
   return localStorage.getItem(NAME_KEY) ?? "";
 }
 
+export function persistName(name: string): void {
+  localStorage.setItem(NAME_KEY, name);
+}
+
 export function token(): string {
   return localStorage.getItem(TOKEN_KEY) ?? "";
 }

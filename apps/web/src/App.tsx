@@ -9,6 +9,7 @@ import {
   fetchMe,
   joinRoom,
   leaveRoom,
+  persistName,
   savedName,
   type RoomSnapshot,
 } from "./api";
@@ -149,6 +150,11 @@ export function App() {
         onLeave={exit}
         onFillBots={() => send({ type: "fill_bots" })}
         onOpenRules={() => setRulesOpen(true)}
+        onRename={(next) => {
+          setName(next);
+          persistName(next);
+          send({ type: "rename", name: next });
+        }}
       />
       {rules}
     </>

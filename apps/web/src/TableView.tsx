@@ -38,6 +38,7 @@ export function TableView({
   onLeave,
   onFillBots,
   onOpenRules,
+  onRename,
 }: {
   room: RoomSnapshot;
   now: number;
@@ -48,6 +49,7 @@ export function TableView({
   onLeave: () => void;
   onFillBots: () => void;
   onOpenRules: () => void;
+  onRename: (name: string) => void;
 }) {
   const state = room.state;
   const play = useRevealPlay(state, room.status);
@@ -170,6 +172,8 @@ export function TableView({
                 thinking={botThinking}
                 place={place}
                 showCards={Boolean(player.cards && (isCurrent || isPrev))}
+                renameable={room.mode === "pvp" && player.id === room.you}
+                onRename={onRename}
               />
             );
           })}
@@ -193,7 +197,10 @@ export function TableView({
           />
         ) : !room.started && room.hostId === room.you ? (
           <div className="action-bar">
-            <p className="muted">分享房间码 {room.code}，或用 LLM Bot 补齐空位</p>
+            <p className="muted">
+              分享房间码 {room.code}，或用 LLM Bot 补齐空位
+              {room.mode === "pvp" ? "。点自己座位上的「改名」换昵称。" : ""}
+            </p>
             <button className="btn primary" onClick={onFillBots}>
               用 Bot 开局
             </button>
