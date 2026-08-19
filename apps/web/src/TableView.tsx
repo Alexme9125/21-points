@@ -144,7 +144,10 @@ export function TableView({
                 <span />
               </div>
               <div>
-                <small>许愿池 · 底注 {formatTokens(ante)}/人</small>
+                <small>
+                  <span className="pool-title">许愿池</span>
+                  <span className="pool-ante"> · 底注 {formatTokens(ante)}/人</span>
+                </small>
                 <b>{formatTokens(play.pool)}</b>
               </div>
             </div>
@@ -216,7 +219,13 @@ export function TableView({
       </footer>
 
       {state ? (
-        <SettlementModal state={state} you={room.you} onContinue={onContinue} onLeave={onLeave} />
+        <SettlementModal
+          state={state}
+          you={room.you}
+          mode={room.mode}
+          onContinue={onContinue}
+          onLeave={onLeave}
+        />
       ) : null}
     </div>
   );

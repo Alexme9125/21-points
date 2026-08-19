@@ -347,9 +347,12 @@ export function attachSocket(session: Session, ws: WebSocket): void {
   ws.on("close", () => {
     set!.delete(ws);
     if (set!.size === 0) {
-      seat.connected = false;
       room.sockets.delete(session.playerId);
-      broadcast(room);
+      const current = room.seats.find((s) => s.id === session.playerId);
+      if (current) {
+        current.connected = false;
+        broadcast(room);
+      }
     }
   });
 }
@@ -396,6 +399,27 @@ function hostFill(room: Room, playerId: string): void {
   startTable(room);
 }
 
+function removeHuman(room: Room, playerId: string): boolean {
+  room.seats = room.seats.filter((s) => s.id !== playerId);
+  if (room.hostId === playerId) {
+    const nextHost = room.seats.find((s) => s.kind === "human");
+    if (nextHost) room.hostId = nextHost.id;
+  }
+  if (!room.seats.some((s) => s.kind === "human")) {
+    clearTimers(room);
+    rooms.delete(room.code);
+    return true;
+  }
+  return false;
+}
+
+function abortPvpTable(room: Room): void {
+  clearTimers(room);
+  room.table = null;
+  room.seats = room.seats.filter((s) => s.kind === "human");
+  room.usedPersonas.clear();
+}
+
 export function leaveRoom(session: Session): void {
   const code = session.roomCode;
   if (!code) return;
@@ -407,23 +431,18 @@ export function leaveRoom(session: Session): void {
     for (const ws of sockets) ws.close();
     room.sockets.delete(session.playerId);
   }
-  if (!room.table) {
-    room.seats = room.seats.filter((s) => s.id !== session.playerId);
-    if (room.seats.length === 0) {
-      clearTimers(room);
-      rooms.delete(room.code);
-      return;
-    }
-    if (room.hostId === session.playerId) {
-      const nextHost = room.seats.find((s) => s.kind === "human");
-      if (nextHost) room.hostId = nextHost.id;
-    }
-    broadcast(room);
-  } else {
-    const seat = room.seats.find((s) => s.id === session.playerId);
-    if (seat) seat.connected = false;
-    broadcast(room);
+  if (room.table && room.mode === "pvp") {
+    abortPvpTable(room);
+    if (!removeHuman(room, session.playerId)) broadcast(room);
+    return;
   }
+  if (!room.table) {
+    if (!removeHuman(room, session.playerId)) broadcast(room);
+    return;
+  }
+  const seat = room.seats.find((s) => s.id === session.playerId);
+  if (seat) seat.connected = false;
+  broadcast(room);
 }
 
 export function roomSnapshotFor(session: Session): RoomSnapshot | null {

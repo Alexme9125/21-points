@@ -3,11 +3,13 @@ import { formatTokens, type PublicState } from "@hotpot/engine";
 export function SettlementModal({
   state,
   you,
+  mode,
   onContinue,
   onLeave,
 }: {
   state: PublicState;
   you: string;
+  mode?: "pve" | "pvp";
   onContinue: () => void;
   onLeave: () => void;
 }) {
@@ -44,6 +46,9 @@ export function SettlementModal({
           许愿池剩余 {formatTokens(settlement.leftoverPool)} Tokens
           {settlement.splitEach ? ` · 每人分得 ${formatTokens(settlement.splitEach)}` : ""}
         </p>
+        {mode === "pvp" ? (
+          <p className="muted">返回大厅后本局立即结束，你的座位空出，房间回到等待开局。</p>
+        ) : null}
         <div className="row">
           {state.phase === "gameover" ? (
             <button className="btn primary" onClick={onLeave}>
