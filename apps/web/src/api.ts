@@ -35,6 +35,10 @@ export function savedName(): string {
   return localStorage.getItem(NAME_KEY) ?? "";
 }
 
+export function token(): string {
+  return localStorage.getItem(TOKEN_KEY) ?? "";
+}
+
 export async function ensureSession(name: string): Promise<Session> {
   const res = await fetch("/api/session", {
     method: "POST",
