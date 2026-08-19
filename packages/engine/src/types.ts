@@ -31,68 +31,58 @@ export interface Player {
   kind: PlayerKind;
   personaId?: string;
   tokens: number;
-  /** Paid ante this hand and still has chips to be dealt. */
+  /** Posted a bet this round and still has a hand. */
   inHand: boolean;
 }
 
 export interface TableConfig {
   startingTokens: number;
-  ante: number;
-  minAdd: number;
-  maxAdd: number;
-  maxLoss: number;
+  minBet: number;
+  maxBet: number;
   seatCount: number;
-  dealsUntilSplit: number;
+  roundsUntilSettle: number;
 }
 
 export const DEFAULT_CONFIG: TableConfig = {
   startingTokens: 500_000,
-  ante: 50_000,
-  minAdd: 5_000,
-  maxAdd: 100_000,
-  maxLoss: 200_000,
+  minBet: 5_000,
+  maxBet: 100_000,
   seatCount: 4,
-  dealsUntilSplit: 24,
+  roundsUntilSettle: 24,
 };
 
-export const POOL_NAME = "许愿池";
+export const DEALER_NAME = "庄家";
 
-export type Phase = "idle" | "awaiting" | "reveal" | "settlement" | "gameover";
+export type Phase = "idle" | "betting" | "awaiting" | "reveal" | "settlement" | "gameover";
 
-export type HoleKind = "consecutive" | "pair" | "spread";
+export type HandStatus = "open" | "stood" | "bust" | "blackjack" | "surrender";
 
-export type OutcomeKind =
-  | "consecutive"
-  | "fold"
-  | "win"
-  | "lose"
-  | "horn"
-  | "triple_win"
-  | "triple_lose";
+export type OutcomeKind = "blackjack" | "win" | "push" | "lose" | "bust" | "surrender";
+
+export type ActionType = "bet" | "hit" | "stand" | "double" | "split" | "surrender";
 
 export interface RevealOutcome {
   kind: OutcomeKind;
+  /** Chips returned to the player (0 on a loss). */
   amount: number;
-  /** Tokens posted as the add, before win/lose/horn is applied. */
-  wager?: number;
-  multiplier?: number;
-  third?: Card;
+  wager: number;
 }
 
 export type LogKind =
-  | "ante"
+  | "bet"
   | "deal"
   | "shuffle"
-  | "consecutive"
-  | "fold"
-  | "add"
-  | "win"
-  | "lose"
-  | "horn"
-  | "triple_win"
-  | "triple_lose"
-  | "pool_empty"
+  | "hit"
+  | "stand"
+  | "double"
   | "split"
+  | "surrender"
+  | "bust"
+  | "blackjack"
+  | "win"
+  | "push"
+  | "lose"
+  | "dealer"
   | "gameover";
 
 export interface LogEntry {
@@ -110,24 +100,28 @@ export interface BetRange {
   locked: boolean;
 }
 
-export interface HoleHint {
-  kind: HoleKind;
-  winRanks: Rank[];
-  hornRanks: Rank[];
-  loseRanks: Rank[];
+export interface HandHint {
+  total: number;
+  soft: boolean;
+  dealerUp: number | null;
+  label: string;
 }
 
-export interface SeatCards {
-  hole: [Card, Card];
-  third?: Card;
+export interface HandState {
+  cards: Card[];
+  bet: number;
+  status: HandStatus;
+  fromSplit: boolean;
   outcome?: RevealOutcome;
 }
 
+export interface SeatCards {
+  hands: HandState[];
+}
+
 export interface Settlement {
-  reason: "empty" | "split" | "gameover";
+  reason: "rounds" | "gameover";
   deltas: Record<string, number>;
-  leftoverPool: number;
-  splitEach?: number;
 }
 
 export interface TableState {
@@ -136,14 +130,14 @@ export interface TableState {
   phase: Phase;
   rng: number;
   deck: Card[];
-  projectPool: number;
+  dealer: Card[];
+  dealerRevealed: boolean;
+  pot: number;
   firstActorIndex: number;
   currentIndex: number;
-  orbitDeals: number;
+  currentHandIndex: number;
   dealsThisHand: number;
   handNumber: number;
-  hole: [Card, Card] | null;
-  third: Card | null;
   outcome: RevealOutcome | null;
   logs: LogEntry[];
   logSeq: number;
@@ -152,7 +146,13 @@ export interface TableState {
   settlement: Settlement | null;
 }
 
-export type PlayerAction = { type: "fold" } | { type: "add"; amount: number };
+export type PlayerAction =
+  | { type: "bet"; amount: number }
+  | { type: "hit" }
+  | { type: "stand" }
+  | { type: "double" }
+  | { type: "split" }
+  | { type: "surrender" };
 
 export interface PublicPlayer {
   id: string;
@@ -164,22 +164,30 @@ export interface PublicPlayer {
   cards?: SeatCards;
 }
 
+export interface PublicDealer {
+  cards: Card[];
+  hidden: boolean;
+  total: number | null;
+  bust: boolean;
+  blackjack: boolean;
+}
+
 export interface PublicState {
   phase: Phase;
   config: TableConfig;
   players: PublicPlayer[];
-  projectPool: number;
+  dealer: PublicDealer;
+  pot: number;
   currentIndex: number;
   currentPlayerId: string | null;
+  currentHandIndex: number;
   firstActorIndex: number;
-  orbitDeals: number;
   dealsThisHand: number;
   handNumber: number;
-  hole: [Card, Card] | null;
-  third: Card | null;
   outcome: RevealOutcome | null;
-  hint: HoleHint | null;
+  hint: HandHint | null;
   betRange: BetRange | null;
+  legalActions: ActionType[];
   logs: LogEntry[];
   settlement: Settlement | null;
 }

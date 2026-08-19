@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { makeDeck } from "./cards.js";
 import {
+  basicPlay,
   botThinkMs,
   chooseBotAction,
-  computeBetRange,
   createTable,
   DEFAULT_CONFIG,
-  evaluateSpot,
-  forceAwaiting,
+  forceBetting,
+  forcePlaying,
   styleForPersona,
 } from "./index.js";
 import type { Card, Player, Rank, Suit, TableState } from "./types.js";
@@ -23,122 +23,69 @@ function fourBots(): Pick<Player, "id" | "name" | "kind" | "personaId">[] {
   ];
 }
 
-function sameRank(a: Card, b: Card): boolean {
-  return a.rank === b.rank && a.suit === b.suit;
-}
-
-function leftoverDeck(hole: [Card, Card]): Card[] {
-  return makeDeck().filter((card) => !hole.some((h) => sameRank(h, card)));
-}
-
-function awaitingWith(
-  personaId: string,
-  hole: [Card, Card],
-  pool = 200_000,
-): TableState {
+function tableWith(personaId: string): TableState {
   const players = fourBots();
   players[0] = { ...players[0]!, personaId, name: personaId };
-  const table = createTable(players, { ...DEFAULT_CONFIG }, 11);
-  table.projectPool = pool;
-  for (const p of table.players) {
-    p.inHand = true;
-    p.tokens = DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante;
-  }
-  return forceAwaiting(table, 0, hole, leftoverDeck(hole));
+  return createTable(players, { ...DEFAULT_CONFIG }, 11);
 }
 
-function foldRate(personaId: string, hole: [Card, Card], n = 64): number {
-  let folds = 0;
-  for (let i = 0; i < n; i++) {
-    const action = chooseBotAction(awaitingWith(personaId, hole));
-    if (action.type === "fold") folds += 1;
-  }
-  return folds / n;
-}
+describe("basic strategy", () => {
+  it("stands a hard 18 and hits a 12 versus 7", () => {
+    expect(basicPlay([c(10), c(8)], false, 10, ["hit", "stand"])).toBe("stand");
+    expect(basicPlay([c(5), c(7)], false, 7, ["hit", "stand"])).toBe("hit");
+  });
 
-function addAmounts(personaId: string, hole: [Card, Card], n = 48): number[] {
-  const amounts: number[] = [];
-  for (let i = 0; i < n; i++) {
-    const action = chooseBotAction(awaitingWith(personaId, hole));
-    if (action.type === "add") amounts.push(action.amount);
-  }
-  return amounts;
-}
-
-function average(values: number[]): number {
-  expect(values.length).toBeGreaterThan(8);
-  return values.reduce((a, b) => a + b, 0) / values.length;
-}
+  it("splits aces and eights, and doubles a hard 11 versus 6", () => {
+    expect(basicPlay([c(1, "spades"), c(1, "hearts")], false, 10, ["hit", "stand", "split"])).toBe(
+      "split",
+    );
+    expect(basicPlay([c(8, "spades"), c(8, "hearts")], false, 9, ["hit", "stand", "split"])).toBe(
+      "split",
+    );
+    expect(basicPlay([c(5), c(6)], false, 6, ["hit", "stand", "double"])).toBe("double");
+  });
+});
 
 describe("bot personas", () => {
-  it("treats a 3-J spread as roughly break-even", () => {
-    const spot = evaluateSpot(awaitingWith("gpt", [c(3), c(11)]));
-    expect(spot?.kind).toBe("spread");
-    expect(spot?.unitEv ?? 99).toBeCloseTo(0, 1);
-    expect(spot?.pWin ?? 0).toBeGreaterThan(0.5);
-  });
-
-  it("usually plays a medium 3-J instead of folding it", () => {
-    const hole: [Card, Card] = [c(3), c(11)];
-    expect(foldRate("claude", hole)).toBeLessThan(0.22);
-    expect(foldRate("kimi", hole)).toBeLessThan(0.28);
-    expect(foldRate("deepseek", hole)).toBeLessThan(0.12);
-  });
-
-  it("on a medium-low 4-10, prefers a small add over folding, and cautious stays smaller", () => {
-    const hole: [Card, Card] = [c(4), c(10)];
-    const claudeFold = foldRate("claude", hole);
-    const deepFold = foldRate("deepseek", hole);
-    expect(claudeFold).toBeLessThan(0.5);
-    expect(deepFold).toBeLessThan(0.2);
-    expect(claudeFold).toBeGreaterThan(deepFold);
-
-    const claude = average(addAmounts("claude", hole));
-    const deep = average(addAmounts("deepseek", hole));
-    expect(claude).toBeLessThan(deep);
-    expect(claude).toBeLessThan(40_000);
-  });
-
-  it("still folds a trash A-4 most of the time", () => {
-    const hole: [Card, Card] = [c(1), c(4)];
-    expect(foldRate("claude", hole)).toBeGreaterThan(0.85);
-    expect(foldRate("deepseek", hole)).toBeGreaterThan(0.7);
-  });
-
-  it("sizes a medium-high 4-K larger for aggressive bots", () => {
-    const hole: [Card, Card] = [c(4), c(13)];
-    expect(average(addAmounts("claude", hole))).toBeLessThan(average(addAmounts("deepseek", hole)));
-    expect(average(addAmounts("gemini", hole))).toBeGreaterThan(average(addAmounts("gpt", hole)));
-  });
-
-  it("lets aggressive bots shove the legal max more often on a fat A-K", () => {
-    const hole: [Card, Card] = [c(1), c(13)];
-    const range = computeBetRange(awaitingWith("deepseek", hole));
-    expect(range?.max).toBe(DEFAULT_CONFIG.maxAdd);
-
-    const rate = (id: string) => {
-      const amounts = addAmounts(id, hole, 72);
-      return amounts.filter((n) => n === range!.max).length / amounts.length;
-    };
-    const claude = rate("claude");
-    const deepseek = rate("deepseek");
-    expect(deepseek).toBeGreaterThan(0.25);
-    expect(deepseek).toBeGreaterThan(claude);
-    expect(average(addAmounts("claude", hole))).toBeLessThan(average(addAmounts("deepseek", hole)));
-  });
-
-  it("still only posts the locked min add on a pair, even when aggressive", () => {
-    const hole: [Card, Card] = [c(7, "spades"), c(7, "hearts")];
-    for (let i = 0; i < 24; i++) {
-      const action = chooseBotAction(awaitingWith("deepseek", hole));
-      if (action.type === "add") {
-        expect(action.amount).toBe(DEFAULT_CONFIG.minAdd);
+  it("always posts a legal bet in the betting phase", () => {
+    for (const id of ["claude", "deepseek", "gemini"] as const) {
+      const amounts: number[] = [];
+      for (let i = 0; i < 24; i++) {
+        const state = forceBetting(tableWith(id), 0);
+        const action = chooseBotAction(state);
+        expect(action.type).toBe("bet");
+        if (action.type === "bet") amounts.push(action.amount);
       }
+      expect(Math.min(...amounts)).toBeGreaterThanOrEqual(DEFAULT_CONFIG.minBet);
+      expect(Math.max(...amounts)).toBeLessThanOrEqual(DEFAULT_CONFIG.maxBet);
     }
   });
 
+  it("sizes bets larger for aggressive personas", () => {
+    const avg = (id: string) => {
+      let sum = 0;
+      for (let i = 0; i < 40; i++) {
+        const action = chooseBotAction(forceBetting(tableWith(id), 0));
+        if (action.type === "bet") sum += action.amount;
+      }
+      return sum / 40;
+    };
+    expect(avg("claude")).toBeLessThan(avg("deepseek"));
+    expect(avg("gpt")).toBeLessThan(avg("gemini"));
+  });
+
+  it("usually stands a hard 18 versus a ten", () => {
+    let stands = 0;
+    for (let i = 0; i < 30; i++) {
+      const state = forcePlaying(tableWith("gpt"), 0, [c(10), c(8)], [c(13), c(7)], makeDeck());
+      const action = chooseBotAction(state);
+      if (action.type === "stand") stands += 1;
+    }
+    expect(stands).toBeGreaterThan(24);
+  });
+
   it("tanks at least a few seconds so the table can see them think", () => {
-    const state = awaitingWith("gemini", [c(3), c(11)]);
+    const state = forcePlaying(tableWith("gemini"), 0, [c(10), c(6)], [c(10), c(7)]);
     for (let i = 0; i < 12; i++) {
       const ms = botThinkMs(state);
       expect(ms).toBeGreaterThanOrEqual(3_600);
@@ -146,7 +93,7 @@ describe("bot personas", () => {
     }
     const cautious = styleForPersona("claude");
     const aggro = styleForPersona("deepseek");
-    expect(cautious.foldBelow).toBeGreaterThan(aggro.foldBelow);
+    expect(cautious.scratch).toBeGreaterThan(aggro.scratch);
     expect(cautious.shove).toBeLessThan(aggro.shove);
     expect(aggro.sizeBias).toBeGreaterThan(cautious.sizeBias);
   });

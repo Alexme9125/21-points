@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, formatTokens, type PublicPlayer } from "@hotpot/engine";
+import { DEALER_NAME, DEFAULT_CONFIG, formatTokens, handLabel, type PlayerAction, type PublicPlayer } from "@hotpot/engine";
 import { useEffect, useState } from "react";
 import { ActionBar } from "./ActionBar";
 import { CardView } from "./CardView";
@@ -17,23 +17,11 @@ function placeFor(viewerIndex: number, seatIndex: number, count: number): (typeo
   return PLACES[offset] ?? "bottom";
 }
 
-function previousPlayerId(players: PublicPlayer[], currentIndex: number): string | null {
-  if (players.length === 0) return null;
-  const n = players.length;
-  for (let step = 1; step < n; step++) {
-    const idx = (currentIndex - step + n) % n;
-    const p = players[idx];
-    if (p?.inHand) return p.id;
-  }
-  return null;
-}
-
 export function TableView({
   room,
   now,
   error,
-  onFold,
-  onAdd,
+  onAction,
   onContinue,
   onLeave,
   onFillBots,
@@ -43,8 +31,7 @@ export function TableView({
   room: RoomSnapshot;
   now: number;
   error?: string;
-  onFold: () => void;
-  onAdd: (amount: number) => void;
+  onAction: (action: PlayerAction) => void;
   onContinue: () => void;
   onLeave: () => void;
   onFillBots: () => void;
@@ -64,36 +51,45 @@ export function TableView({
     }))) as PublicPlayer[];
   const youIndex = Math.max(0, seats.findIndex((p) => p.id === room.you));
   const remain = room.deadline ? Math.max(0, Math.ceil((room.deadline - now) / 1000)) : null;
-  const yourTurn = Boolean(state && state.phase === "awaiting" && state.currentPlayerId === room.you);
+  const yourTurn = Boolean(
+    state && (state.phase === "awaiting" || state.phase === "betting") && state.currentPlayerId === room.you,
+  );
   const currentKind = seats.find((p) => p.id === state?.currentPlayerId)?.kind;
   const showTurnClock = Boolean(
-    remain !== null && state?.phase === "awaiting" && currentKind === "human",
+    remain !== null &&
+      (state?.phase === "awaiting" || state?.phase === "betting") &&
+      currentKind === "human",
   );
-  const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}`;
+  const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}-${state?.currentHandIndex ?? 0}`;
   const [lockedTurn, setLockedTurn] = useState("");
   const [sound, setSound] = useState(isSoundOn);
   useEffect(() => {
-    if (state?.phase !== "awaiting") setLockedTurn("");
+    if (state?.phase !== "awaiting" && state?.phase !== "betting") setLockedTurn("");
   }, [state?.phase, turnKey]);
 
-  const prevId = state ? previousPlayerId(seats, state.currentIndex) : null;
-  const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}`;
-  const maxDeals = state?.config.dealsUntilSplit ?? 24;
-  const ante = state?.config.ante ?? DEFAULT_CONFIG.ante;
-  const minAdd = state?.config.minAdd ?? DEFAULT_CONFIG.minAdd;
+  const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}-${state?.dealer.cards.length ?? 0}-${play.showDealerHole}`;
+  const maxRounds = state?.config.roundsUntilSettle ?? 24;
+  const minBet = state?.config.minBet ?? DEFAULT_CONFIG.minBet;
+  const dealer = state?.dealer;
+  const dealerCards = dealer?.cards ?? [];
+
+  function act(action: PlayerAction) {
+    setLockedTurn(turnKey);
+    onAction(action);
+  }
 
   return (
     <div className="table-page">
       <header className="topbar">
         <div className="top-brand">
-          <strong>吃火锅</strong>
+          <strong>21点</strong>
           <span className="stakes">
-            底注 {formatTokens(ante)}/人 · 最小 {formatTokens(minAdd)}
+            最小 {formatTokens(minBet)} · 最大 {formatTokens(state?.config.maxBet ?? DEFAULT_CONFIG.maxBet)}
           </span>
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
-          {state ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxDeals}` : "等待开局"}
+          {state ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxRounds} 局` : "等待开局"}
         </div>
         <div className="top-right">
           <em className="status-text">{play.status}</em>
@@ -124,14 +120,23 @@ export function TableView({
       <div className="felt-wrap">
         <div className={`felt ${play.stage === "wager" ? "posting" : ""}`}>
           <div className="board">
-            {state?.hole ? (
+            {dealerCards.length > 0 || dealer?.hidden ? (
               <div className="board-cards" key={drawKey}>
-                <CardView card={state.hole[0]} tilt={-6} draw delayMs={0} />
-                <CardView card={state.hole[1]} tilt={6} draw delayMs={90} />
-                {play.showThird && state.third ? (
-                  <CardView card={state.third} tilt={0} draw delayMs={0} />
+                {dealerCards[0] ? (
+                  <CardView card={dealerCards[0]} tilt={-6} draw delayMs={0} />
+                ) : null}
+                {dealer?.hidden || (state?.phase === "reveal" && !play.showDealerHole) ? (
+                  <CardView faceDown tilt={6} draw delayMs={90} />
                 ) : (
-                  <div className={`ghost-card ${play.stage === "wager" ? "pending" : ""}`} />
+                  dealerCards.slice(1).map((card, i) => (
+                    <CardView
+                      key={`${card.suit}-${card.rank}-${i}`}
+                      card={card}
+                      tilt={i % 2 === 0 ? 6 : -4}
+                      draw
+                      delayMs={90 + i * 70}
+                    />
+                  ))
                 )}
               </div>
             ) : (
@@ -145,8 +150,12 @@ export function TableView({
               </div>
               <div>
                 <small>
-                  <span className="pool-title">许愿池</span>
-                  <span className="pool-ante"> · 底注 {formatTokens(ante)}/人</span>
+                  <span className="pool-title">{DEALER_NAME}</span>
+                  <span className="pool-ante">
+                    {dealer && !dealer.hidden && dealer.cards.length
+                      ? ` · ${handLabel(dealer.cards)}`
+                      : " · 闲家对庄家"}
+                  </span>
                 </small>
                 <b>{formatTokens(play.pool)}</b>
               </div>
@@ -164,8 +173,10 @@ export function TableView({
               );
             }
             const isCurrent = state?.currentPlayerId === player.id;
-            const isPrev = prevId === player.id && prevId !== state?.currentPlayerId;
-            const botThinking = Boolean(state?.phase === "awaiting" && isCurrent && player.kind === "bot");
+            const botThinking = Boolean(
+              (state?.phase === "awaiting" || state?.phase === "betting") && isCurrent && player.kind === "bot",
+            );
+            const dealt = Boolean(player.cards?.hands.some((h) => h.cards.length > 0));
             return (
               <SeatCapsule
                 key={player.id}
@@ -174,7 +185,7 @@ export function TableView({
                 active={Boolean(isCurrent)}
                 thinking={botThinking}
                 place={place}
-                showCards={Boolean(player.cards && (isCurrent || isPrev))}
+                showCards={dealt}
                 renameable={room.mode === "pvp" && player.id === room.you}
                 onRename={onRename}
               />
@@ -185,18 +196,18 @@ export function TableView({
       </div>
 
       <footer className="bottom-dock">
-        {yourTurn ? (
+        {yourTurn && state ? (
           <ActionBar
-            range={state?.betRange ?? null}
+            phase={state.phase === "betting" ? "betting" : "awaiting"}
+            range={state.betRange ?? null}
+            actions={state.legalActions}
             disabled={lockedTurn === turnKey}
-            onFold={() => {
-              setLockedTurn(turnKey);
-              onFold();
-            }}
-            onAdd={(amount) => {
-              setLockedTurn(turnKey);
-              onAdd(amount);
-            }}
+            onBet={(amount) => act({ type: "bet", amount })}
+            onHit={() => act({ type: "hit" })}
+            onStand={() => act({ type: "stand" })}
+            onDouble={() => act({ type: "double" })}
+            onSplit={() => act({ type: "split" })}
+            onSurrender={() => act({ type: "surrender" })}
           />
         ) : !room.started && room.hostId === room.you ? (
           <div className="action-bar">

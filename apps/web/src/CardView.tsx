@@ -22,27 +22,37 @@ export function CardView({
   compact,
   draw = false,
   delayMs = 0,
+  faceDown = false,
 }: {
-  card: Card;
+  card?: Card;
   tilt?: number;
   compact?: boolean;
   draw?: boolean;
   delayMs?: number;
+  faceDown?: boolean;
 }) {
-  const red = isRed(card.suit);
+  const className = `playing-card ${compact ? "compact" : ""} ${draw ? "draw" : ""} ${
+    faceDown || !card ? "back" : isRed(card.suit) ? "red" : "black"
+  }`;
   return (
     <div
-      key={cardKey(card)}
-      className={`playing-card ${red ? "red" : "black"} ${compact ? "compact" : ""} ${draw ? "draw" : ""}`}
+      key={card && !faceDown ? cardKey(card) : `back-${tilt}`}
+      className={className}
       style={{ ["--tilt" as string]: `${tilt}deg`, ["--draw-delay" as string]: `${delayMs}ms` }}
     >
-      <div className="corner">
-        <b>{rankLabel(card.rank)}</b>
-        <SuitIcon suit={card.suit} />
-      </div>
-      <div className="center-suit">
-        <SuitIcon suit={card.suit} />
-      </div>
+      {faceDown || !card ? (
+        <div className="back-mark" />
+      ) : (
+        <>
+          <div className="corner">
+            <b>{rankLabel(card.rank)}</b>
+            <SuitIcon suit={card.suit} />
+          </div>
+          <div className="center-suit">
+            <SuitIcon suit={card.suit} />
+          </div>
+        </>
+      )}
     </div>
   );
 }

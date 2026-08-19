@@ -5,7 +5,8 @@ import {
   continueFromSettlement,
   createTable,
   DEFAULT_CONFIG,
-  forceAwaiting,
+  forceBetting,
+  forcePlaying,
   startHand,
   toPublicState,
 } from "./index.js";
@@ -22,9 +23,8 @@ function fourPlayers(): Pick<Player, "id" | "name" | "kind">[] {
   ];
 }
 
-function fresh(pool = 80_000): TableState {
+function fresh(): TableState {
   const table = createTable(fourPlayers(), DEFAULT_CONFIG, 1);
-  table.projectPool = pool;
   for (const p of table.players) {
     p.inHand = true;
     p.tokens = DEFAULT_CONFIG.startingTokens;
@@ -32,139 +32,173 @@ function fresh(pool = 80_000): TableState {
   return table;
 }
 
-describe("applyAction outcomes", () => {
-  it("wins when the third card is strictly between the hole ranks", () => {
-    let state = forceAwaiting(fresh(), 0, [c(4), c(11)], [c(8, "hearts")]);
-    state = applyAction(state, "p1", { type: "add", amount: 10_000 });
-    expect(state.outcome?.kind).toBe("win");
-    expect(state.outcome?.amount).toBe(10_000);
-    expect(state.outcome?.wager).toBe(10_000);
-    expect(state.projectPool).toBe(70_000);
+describe("betting and play", () => {
+  it("starts a hand in the betting phase with a legal range", () => {
+    const state = startHand(createTable(fourPlayers(), DEFAULT_CONFIG, 99));
+    expect(state.phase).toBe("betting");
+    const pub = toPublicState(state);
+    expect(pub.betRange).toEqual({
+      min: DEFAULT_CONFIG.minBet,
+      max: DEFAULT_CONFIG.maxBet,
+      locked: false,
+    });
+    expect(pub.legalActions).toEqual(["bet"]);
+    expect(state.players.every((p) => p.tokens === DEFAULT_CONFIG.startingTokens)).toBe(true);
+  });
+
+  it("hides the dealer hole card from public state while players act", () => {
+    let state = forcePlaying(fresh(), 0, [c(10), c(7)], [c(9), c(10)], [c(5)]);
+    const pub = toPublicState(state);
+    expect(pub.dealer.cards).toHaveLength(1);
+    expect(pub.dealer.cards[0]?.rank).toBe(9);
+    expect(pub.dealer.hidden).toBe(true);
+    expect(pub.dealer.total).toBeNull();
+  });
+
+  it("hits until the player stands, then the dealer draws to 17 and regular 20 beats 18", () => {
+    // Player 10+7=17, hits a 3 → 20, stands. Dealer 9+6=15, draws 3 → 18.
+    let state = forcePlaying(
+      fresh(),
+      0,
+      [c(10), c(7)],
+      [c(9), c(6)],
+      [c(3, "hearts"), c(3, "clubs")],
+      10_000,
+    );
+    state = applyAction(state, "p1", { type: "hit" });
+    expect(state.lastCards.p1!.hands[0]!.cards).toHaveLength(3);
+    expect(state.phase).toBe("awaiting");
+    state = applyAction(state, "p1", { type: "stand" });
+    expect(state.phase).toBe("reveal");
+    expect(state.dealerRevealed).toBe(true);
+    expect(state.dealer.map((card) => card.rank)).toEqual([9, 6, 3]);
+    expect(state.lastCards.p1!.hands[0]!.outcome?.kind).toBe("win");
     expect(state.players[0]!.tokens).toBe(510_000);
   });
 
-  it("loses when the third card is outside the spread", () => {
-    let state = forceAwaiting(fresh(), 0, [c(4), c(11)], [c(13, "hearts")]);
-    state = applyAction(state, "p1", { type: "add", amount: 10_000 });
-    expect(state.outcome?.kind).toBe("lose");
+  it("busting loses even if the dealer would have busted", () => {
+    let state = forcePlaying(
+      fresh(),
+      0,
+      [c(10), c(8)],
+      [c(10), c(6)],
+      [c(6, "hearts"), c(8, "clubs")],
+      10_000,
+    );
+    state = applyAction(state, "p1", { type: "hit" });
+    expect(state.phase).toBe("reveal");
+    expect(state.lastCards.p1!.hands[0]!.outcome?.kind).toBe("bust");
+    expect(state.dealer).toHaveLength(2);
     expect(state.players[0]!.tokens).toBe(490_000);
-    expect(state.projectPool).toBe(90_000);
   });
 
-  it("charges 2x for a horn and 4x for A-K horn, capped by maxLoss", () => {
-    let state = forceAwaiting(fresh(), 0, [c(1), c(9)], [c(1, "hearts")]);
-    state = applyAction(state, "p1", { type: "add", amount: 10_000 });
-    expect(state.outcome?.kind).toBe("horn");
-    expect(state.outcome?.multiplier).toBe(2);
-    expect(state.outcome?.amount).toBe(20_000);
-    expect(state.outcome?.wager).toBe(10_000);
-
-    state = forceAwaiting(fresh(), 0, [c(1), c(13)], [c(13, "hearts")]);
-    state = applyAction(state, "p1", { type: "add", amount: 80_000 });
-    expect(state.outcome?.kind).toBe("horn");
-    expect(state.outcome?.multiplier).toBe(4);
-    expect(state.outcome?.amount).toBe(DEFAULT_CONFIG.maxLoss);
+  it("pays 1赔2 on a natural blackjack when the dealer does not have one", () => {
+    const state = forcePlaying(fresh(), 0, [c(1), c(13)], [c(10), c(8)], [], 10_000);
+    expect(state.phase).toBe("reveal");
+    expect(state.lastCards.p1!.hands[0]!.outcome?.kind).toBe("blackjack");
+    expect(state.lastCards.p1!.hands[0]!.outcome?.amount).toBe(30_000);
+    expect(state.players[0]!.tokens).toBe(520_000);
   });
 
-  it("lets a pair take the whole project pool on a triple", () => {
-    let state = forceAwaiting(fresh(40_000), 0, [c(7, "spades"), c(7, "hearts")], [c(7, "clubs")]);
-    const rangeMin = DEFAULT_CONFIG.minAdd;
-    state = applyAction(state, "p1", { type: "add", amount: rangeMin });
-    expect(state.outcome?.kind).toBe("triple_win");
-    expect(state.outcome?.wager).toBe(rangeMin);
-    expect(state.projectPool).toBe(0);
-    expect(state.players[0]!.tokens).toBe(540_000);
+  it("doubles the stake and draws exactly one more card", () => {
+    let state = forcePlaying(fresh(), 0, [c(5), c(6)], [c(9), c(10)], [c(10, "hearts")], 10_000);
+    state = applyAction(state, "p1", { type: "double" });
+    expect(state.lastCards.p1!.hands[0]!.cards).toHaveLength(3);
+    expect(state.lastCards.p1!.hands[0]!.bet).toBe(20_000);
+    expect(state.lastCards.p1!.hands[0]!.outcome?.kind).toBe("win");
+    expect(state.players[0]!.tokens).toBe(520_000);
   });
 
-  it("only deducts the min add when a pair misses", () => {
-    let state = forceAwaiting(fresh(), 0, [c(7, "spades"), c(7, "hearts")], [c(2, "clubs")]);
-    state = applyAction(state, "p1", { type: "add", amount: DEFAULT_CONFIG.minAdd });
-    expect(state.outcome?.kind).toBe("triple_lose");
-    expect(state.outcome?.amount).toBe(DEFAULT_CONFIG.minAdd);
+  it("splits a pair into two hands with a matching extra bet", () => {
+    let state = forcePlaying(
+      fresh(),
+      0,
+      [c(8, "spades"), c(8, "hearts")],
+      [c(6), c(10)],
+      [c(3, "clubs"), c(10, "diamonds"), c(9, "clubs")],
+      10_000,
+    );
+    state = applyAction(state, "p1", { type: "split" });
+    expect(state.lastCards.p1!.hands).toHaveLength(2);
+    expect(state.lastCards.p1!.hands[0]!.cards).toHaveLength(2);
+    expect(state.players[0]!.tokens).toBe(480_000);
+    state = applyAction(state, "p1", { type: "stand" });
+    expect(state.lastCards.p1!.hands[1]!.cards.length).toBeGreaterThanOrEqual(2);
+    state = applyAction(state, "p1", { type: "stand" });
+    expect(state.phase).toBe("reveal");
+    expect(state.lastCards.p1!.hands.every((h) => h.outcome)).toBe(true);
   });
 
-  it("rejects a pair add that is not the locked min", () => {
-    const state = forceAwaiting(fresh(), 0, [c(7, "spades"), c(7, "hearts")], [c(7, "clubs")]);
-    expect(() => applyAction(state, "p1", { type: "add", amount: 20_000 })).toThrow(/不合法/);
+  it("returns half the bet on surrender when the dealer upcard is not an Ace", () => {
+    const state = applyAction(
+      forcePlaying(fresh(), 0, [c(10), c(6)], [c(10), c(10)], [], 10_000),
+      "p1",
+      { type: "surrender" },
+    );
+    expect(state.lastCards.p1!.hands[0]!.outcome?.kind).toBe("surrender");
+    expect(state.players[0]!.tokens).toBe(495_000);
   });
 
-  it("clamps add to half tokens, the pool, and maxAdd", () => {
-    const table = fresh(1_000_000);
-    table.players[0]!.tokens = 30_000;
-    const state = forceAwaiting(table, 0, [c(1), c(13)], [c(8)]);
-    const pub = toPublicState(state);
-    expect(pub.betRange).toEqual({ min: 5_000, max: 15_000, locked: false });
+  it("rejects a bet outside the legal range", () => {
+    const state = forceBetting(fresh(), 0);
+    expect(() => applyAction(state, "p1", { type: "bet", amount: 1_000 })).toThrow(/不合法/);
   });
 });
 
 describe("table flow", () => {
-  it("deals a non-consecutive hole into awaiting with a legal bet range", () => {
-    let state = startHand(createTable(fourPlayers(), DEFAULT_CONFIG, 99));
-    let guard = 0;
-    while (state.phase !== "awaiting" && guard < 12) {
-      if (state.phase === "reveal") state = advance(state);
-      else break;
-      guard += 1;
+  it("deals after every seated player has bet", () => {
+    let state = startHand(createTable(fourPlayers(), DEFAULT_CONFIG, 3));
+    for (let i = 0; i < 4; i++) {
+      expect(state.phase).toBe("betting");
+      const id = state.players[state.currentIndex]!.id;
+      state = applyAction(state, id, { type: "bet", amount: DEFAULT_CONFIG.minBet });
     }
-    expect(state.phase).toBe("awaiting");
-    const pub = toPublicState(state);
-    expect(pub.betRange).not.toBeNull();
-    expect(pub.betRange!.min).toBe(DEFAULT_CONFIG.minAdd);
-    expect(pub.betRange!.max).toBeGreaterThanOrEqual(DEFAULT_CONFIG.minAdd);
+    expect(["awaiting", "reveal"]).toContain(state.phase);
+    expect(state.dealer.length).toBeGreaterThanOrEqual(2);
+    if (state.phase === "awaiting") {
+      expect(state.pot).toBe(DEFAULT_CONFIG.minBet * 4);
+    }
   });
 
-  it("starts a new hand after the pool is emptied", () => {
-    let state = forceAwaiting(fresh(10_000), 0, [c(4), c(11)], [c(8)]);
-    state = applyAction(state, "p1", { type: "add", amount: 10_000 });
-    expect(state.projectPool).toBe(0);
+  it("opens a new betting round after the reveal is advanced", () => {
+    let state = forcePlaying(fresh(), 0, [c(10), c(9)], [c(10), c(8)], [], 10_000);
+    if (state.phase === "awaiting") state = applyAction(state, "p1", { type: "stand" });
+    expect(state.phase).toBe("reveal");
     state = advance(state);
-    expect(state.phase).toBe("settlement");
-    expect(state.settlement?.reason).toBe("empty");
-    state = continueFromSettlement(state);
-    expect(state.handNumber).toBe(1);
-    expect(state.projectPool).toBeGreaterThanOrEqual(DEFAULT_CONFIG.ante * 2);
+    expect(state.phase).toBe("betting");
+    expect(state.dealsThisHand).toBe(1);
   });
 
-  it("splits half the pool after the configured number of deals", () => {
-    let state = createTable(fourPlayers(), DEFAULT_CONFIG, 7);
+  it("settles the session after the configured number of rounds", () => {
+    const config = { ...DEFAULT_CONFIG, roundsUntilSettle: 2 };
+    let state = createTable(fourPlayers(), config, 7);
     state = startHand(state);
     let guard = 0;
-    while (state.phase !== "settlement" && state.phase !== "gameover" && guard < 240) {
+    while (state.phase !== "settlement" && state.phase !== "gameover" && guard < 80) {
       guard += 1;
-      if (state.phase === "awaiting") {
+      if (state.phase === "betting") {
         const id = state.players[state.currentIndex]!.id;
-        state = applyAction(state, id, { type: "fold" });
+        state = applyAction(state, id, { type: "bet", amount: config.minBet });
+      } else if (state.phase === "awaiting") {
+        const id = state.players[state.currentIndex]!.id;
+        state = applyAction(state, id, { type: "stand" });
+      } else if (state.phase === "reveal") {
+        state = advance(state);
+      } else {
+        break;
       }
-      if (state.phase === "reveal") state = advance(state);
     }
     expect(state.phase).toBe("settlement");
-    expect(state.settlement?.reason).toBe("split");
-    expect(state.dealsThisHand).toBe(DEFAULT_CONFIG.dealsUntilSplit);
-    expect(state.projectPool).toBeGreaterThan(0);
+    expect(state.settlement?.reason).toBe("rounds");
+    state = continueFromSettlement(state);
+    expect(state.handNumber).toBe(2);
+    expect(state.phase).toBe("betting");
   });
 
-  it("uses a 50K ante and 24 deals before splitting", () => {
-    expect(DEFAULT_CONFIG.ante).toBe(50_000);
-    expect(DEFAULT_CONFIG.dealsUntilSplit).toBe(24);
-    expect(DEFAULT_CONFIG.minAdd).toBe(5_000);
-  });
-
-  it("collects 50K ante from each player into the wish pool", () => {
-    let state = createTable(fourPlayers(), DEFAULT_CONFIG, 3);
-    state = startHand(state);
-    expect(state.players.every((p) => p.tokens === DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante)).toBe(
-      true,
-    );
-    expect(state.projectPool).toBe(DEFAULT_CONFIG.ante * 4);
-    expect(state.logs.filter((line) => line.kind === "ante")).toHaveLength(4);
-    expect(state.config.ante).toBe(50_000);
-    expect(state.handNumber).toBe(1);
-  });
-
-  it("still collects a 50K ante when createTable is called without an explicit config", () => {
-    const state = startHand(createTable(fourPlayers(), undefined, 3));
-    expect(state.config.ante).toBe(DEFAULT_CONFIG.ante);
-    expect(state.projectPool).toBe(DEFAULT_CONFIG.ante * 4);
-    expect(state.players[0]!.tokens).toBe(DEFAULT_CONFIG.startingTokens - DEFAULT_CONFIG.ante);
+  it("keeps the 5K minimum bet and 24-round session length", () => {
+    expect(DEFAULT_CONFIG.minBet).toBe(5_000);
+    expect(DEFAULT_CONFIG.maxBet).toBe(100_000);
+    expect(DEFAULT_CONFIG.roundsUntilSettle).toBe(24);
+    expect(DEFAULT_CONFIG.startingTokens).toBe(500_000);
   });
 });

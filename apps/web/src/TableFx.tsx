@@ -25,15 +25,12 @@ function centerOf(el: Element, root: DOMRect): { x: number; y: number } {
 }
 
 function sloganFor(outcome: RevealOutcome): { text: string; tone: string } | null {
-  if (outcome.kind === "win") return { text: "爽吃", tone: "win" };
-  if (outcome.kind === "triple_win") return { text: "通吃", tone: "triple" };
-  if (outcome.kind === "lose" || outcome.kind === "triple_lose") return { text: "挨饿", tone: "lose" };
-  if (outcome.kind === "consecutive") return { text: "连张", tone: "skip" };
-  if (outcome.kind === "horn") {
-    return outcome.multiplier === 4
-      ? { text: "超级牛角尖", tone: "super" }
-      : { text: "牛角尖", tone: "horn" };
-  }
+  if (outcome.kind === "blackjack") return { text: "黑杰克", tone: "triple" };
+  if (outcome.kind === "win") return { text: "赢", tone: "win" };
+  if (outcome.kind === "push") return { text: "平", tone: "skip" };
+  if (outcome.kind === "bust") return { text: "爆牌", tone: "horn" };
+  if (outcome.kind === "lose") return { text: "输", tone: "lose" };
+  if (outcome.kind === "surrender") return { text: "投降", tone: "skip" };
   return null;
 }
 
@@ -55,9 +52,9 @@ export function TableFx({
   const [slogans, setSlogans] = useState<Slogan[]>([]);
 
   const outcomeKey = state
-    ? `${state.handNumber}-${state.dealsThisHand}-${state.currentPlayerId}-${state.phase}-${state.outcome?.kind ?? ""}-${state.outcome?.amount ?? 0}`
+    ? `${state.handNumber}-${state.dealsThisHand}-${state.phase}-${state.outcome?.kind ?? ""}-${state.outcome?.amount ?? 0}`
     : "";
-  const handKey = state ? `hand-${state.handNumber}` : "";
+  const dealKey = state ? `deal-${state.handNumber}-${state.dealsThisHand}-${state.phase}` : "";
 
   function fly(fromEl: Element | null, toEl: Element | null, count: number) {
     const host = hostRef.current;
@@ -98,53 +95,51 @@ export function TableFx({
   }
 
   useEffect(() => {
-    if (!state || state.handNumber < 1) return;
+    if (!state || state.phase !== "awaiting") return;
     const host = hostRef.current;
     if (!host) return;
     const pool = host.parentElement?.querySelector("[data-pool]");
     const seats = host.parentElement?.querySelectorAll("[data-player-id]");
     if (!pool || !seats?.length) return;
-    shout(pool, "底注", "ante");
+    shout(pool, "开牌", "ante");
+    playWager();
     seats.forEach((seat, i) => {
-      window.setTimeout(() => fly(seat, pool, 4), i * 90);
+      window.setTimeout(() => fly(seat, pool, 3), i * 80);
     });
-    // Only on new hand.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [handKey]);
+  }, [dealKey]);
 
   useEffect(() => {
     const fireKey = `${outcomeKey}:${stage}`;
-    if (!state?.outcome || !state.currentPlayerId || !fireKey || fired.current === fireKey) return;
+    if (!state || state.phase !== "reveal" || !fireKey || fired.current === fireKey) return;
     fired.current = fireKey;
 
     const host = hostRef.current;
     if (!host) return;
     const root = host.parentElement;
     const pool = root?.querySelector("[data-pool]");
-    const seat = root?.querySelector(`[data-player-id="${state.currentPlayerId}"]`);
-    const outcome = state.outcome;
-    const wager = outcome.wager ?? 0;
-    const kind = outcome.kind;
-
-    if (stage === "wager" && wager > 0) {
-      fly(seat, pool, chipCount(wager));
-      playWager();
-      return;
-    }
 
     if (stage === "result") {
-      const slogan = sloganFor(outcome);
-      if (slogan) shout(seat, slogan.text, slogan.tone);
-      if (kind !== "fold" && kind !== "consecutive") playOutcome(kind);
+      for (const player of state.players) {
+        const seat = root?.querySelector(`[data-player-id="${player.id}"]`);
+        for (const hand of player.cards?.hands ?? []) {
+          if (!hand.outcome) continue;
+          const slogan = sloganFor(hand.outcome);
+          if (slogan) shout(seat, slogan.text, slogan.tone);
+          playOutcome(hand.outcome.kind);
+        }
+      }
       return;
     }
 
     if (stage === "payout") {
-      if (kind === "win" || kind === "triple_win") {
-        fly(pool, seat, kind === "triple_win" ? 10 : chipCount(wager + outcome.amount));
-      } else if (kind === "horn") {
-        const extra = outcome.amount - wager;
-        if (extra > 0) fly(seat, pool, chipCount(extra));
+      for (const player of state.players) {
+        const seat = root?.querySelector(`[data-player-id="${player.id}"]`);
+        for (const hand of player.cards?.hands ?? []) {
+          const outcome = hand.outcome;
+          if (!outcome || outcome.amount <= 0) continue;
+          fly(pool, seat, chipCount(outcome.amount));
+        }
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

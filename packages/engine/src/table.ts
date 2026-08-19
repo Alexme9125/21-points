@@ -1,21 +1,35 @@
 import { cardLabel, makeDeck } from "./cards.js";
 import { formatTokens } from "./format.js";
 import { nextRng, shuffleInPlace } from "./rng.js";
-import { holeHint, holeKind, isAceKing, orderedRanks } from "./rules.js";
+import {
+  canHit,
+  dealerShouldHit,
+  handLabel,
+  handValue,
+  hintFor,
+  isBlackjack,
+  isBust,
+  legalActions,
+  payoutFor,
+} from "./rules.js";
 import type {
+  ActionType,
   BetRange,
   Card,
+  HandState,
   LogEntry,
   LogKind,
   Player,
   PlayerAction,
+  PublicDealer,
   PublicState,
   RevealOutcome,
+  SeatCards,
   Settlement,
   TableConfig,
   TableState,
 } from "./types.js";
-import { DEFAULT_CONFIG, POOL_NAME } from "./types.js";
+import { DEALER_NAME, DEFAULT_CONFIG } from "./types.js";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -39,10 +53,6 @@ function pushLog(
   }
 }
 
-function playerName(state: TableState, id: string): string {
-  return state.players.find((p) => p.id === id)?.name ?? id;
-}
-
 function shuffleDeck(state: TableState): void {
   state.deck = makeDeck();
   state.rng = shuffleInPlace(state.deck, state.rng);
@@ -50,6 +60,7 @@ function shuffleDeck(state: TableState): void {
 }
 
 function draw(state: TableState): Card {
+  if (state.deck.length === 0) shuffleDeck(state);
   const card = state.deck.pop();
   if (!card) {
     shuffleDeck(state);
@@ -58,23 +69,8 @@ function draw(state: TableState): Card {
   return card;
 }
 
-function transferToPool(state: TableState, player: Player, amount: number): number {
-  const paid = Math.max(0, Math.min(amount, player.tokens, state.config.maxLoss));
-  player.tokens -= paid;
-  state.projectPool += paid;
-  if (player.tokens <= 0) player.inHand = false;
-  return paid;
-}
-
-function transferFromPool(state: TableState, player: Player, amount: number): number {
-  const won = Math.max(0, Math.min(amount, state.projectPool));
-  state.projectPool -= won;
-  player.tokens += won;
-  return won;
-}
-
 function countInHand(state: TableState): number {
-  return state.players.filter((p) => p.inHand && p.tokens > 0).length;
+  return state.players.filter((p) => p.inHand && p.tokens >= 0).length;
 }
 
 function nextInHandIndex(state: TableState, from: number): number {
@@ -82,7 +78,7 @@ function nextInHandIndex(state: TableState, from: number): number {
   for (let step = 1; step <= n; step++) {
     const idx = (from + step) % n;
     const p = state.players[idx]!;
-    if (p.inHand && p.tokens > 0) return idx;
+    if (p.inHand) return idx;
   }
   return from;
 }
@@ -96,156 +92,288 @@ function handDeltas(state: TableState): Record<string, number> {
   return deltas;
 }
 
-function settle(state: TableState, reason: Settlement["reason"], extra: Partial<Settlement> = {}): void {
+function settleSession(state: TableState, reason: Settlement["reason"]): void {
   state.phase = reason === "gameover" ? "gameover" : "settlement";
   state.settlement = {
     reason,
     deltas: handDeltas(state),
-    leftoverPool: state.projectPool,
-    ...extra,
   };
-  state.hole = null;
-  state.third = null;
+  state.dealer = [];
+  state.dealerRevealed = false;
+  state.pot = 0;
   if (reason === "gameover") {
     pushLog(state, "gameover", "对局结束");
   }
 }
 
-function splitPool(state: TableState): void {
-  const recipients = state.players.filter((p) => p.tokens > 0);
-  const half = Math.floor(state.projectPool / 2);
-  const n = Math.max(1, recipients.length);
-  const each = Math.floor(half / n);
-  const distributed = each * recipients.length;
-  state.projectPool -= distributed;
-  for (const p of recipients) p.tokens += each;
-  pushLog(
-    state,
-    "split",
-    `满 ${state.config.dealsUntilSplit} 次发牌，${POOL_NAME}一半平分，每人 ${formatTokens(each)} Tokens`,
-    { amount: each },
-  );
-  settle(state, "split", { splitEach: each });
+function emptyHand(): HandState {
+  return { cards: [], bet: 0, status: "open", fromSplit: false };
 }
 
-function maybeEndBeforeDeal(state: TableState): boolean {
-  if (state.projectPool <= 0) {
-    pushLog(state, "pool_empty", `${POOL_NAME}已被清空`);
-    settle(state, "empty");
+function seatOf(state: TableState, playerId: string): SeatCards {
+  const existing = state.lastCards[playerId];
+  if (existing) return existing;
+  const created: SeatCards = { hands: [emptyHand()] };
+  state.lastCards[playerId] = created;
+  return created;
+}
+
+function currentSeat(state: TableState): { player: Player; seat: SeatCards; hand: HandState } | null {
+  const player = state.players[state.currentIndex];
+  if (!player) return null;
+  const seat = state.lastCards[player.id];
+  const hand = seat?.hands[state.currentHandIndex];
+  if (!seat || !hand) return null;
+  return { player, seat, hand };
+}
+
+function betRangeFor(tokens: number, config: TableConfig): BetRange | null {
+  const min = config.minBet;
+  const max = Math.min(config.maxBet, tokens);
+  if (min <= 0 || max < min) return null;
+  return { min, max, locked: min === max };
+}
+
+export function computeBetRange(state: TableState): BetRange | null {
+  if (state.phase !== "betting") return null;
+  const player = state.players[state.currentIndex];
+  if (!player) return null;
+  return betRangeFor(player.tokens, state.config);
+}
+
+function maybeEndSession(state: TableState): boolean {
+  const canPlay = state.players.filter((p) => p.tokens >= state.config.minBet).length;
+  if (canPlay < 1) {
+    settleSession(state, "gameover");
     return true;
   }
-  if (state.dealsThisHand >= state.config.dealsUntilSplit) {
-    splitPool(state);
-    return true;
-  }
-  if (countInHand(state) < 2) {
-    const leftover = state.projectPool;
-    if (leftover > 0) {
-      const alive = state.players.filter((p) => p.tokens > 0);
-      if (alive.length === 1) {
-        alive[0]!.tokens += leftover;
-        state.projectPool = 0;
-      } else if (alive.length > 1) {
-        const each = Math.floor(leftover / alive.length);
-        for (const p of alive) p.tokens += each;
-        state.projectPool -= each * alive.length;
-      }
-    }
-    settle(state, "gameover");
+  if (state.dealsThisHand >= state.config.roundsUntilSettle) {
+    settleSession(state, "rounds");
     return true;
   }
   return false;
 }
 
-function dealToCurrent(state: TableState): void {
-  if (state.orbitDeals >= state.players.length) {
-    shuffleDeck(state);
-    state.orbitDeals = 0;
-    state.lastCards = {};
-  }
-
-  const player = state.players[state.currentIndex]!;
-  const a = draw(state);
-  const b = draw(state);
-  state.hole = [a, b];
-  state.third = null;
+function beginBetting(state: TableState): void {
+  if (maybeEndSession(state)) return;
   state.outcome = null;
+  state.dealer = [];
+  state.dealerRevealed = false;
+  state.pot = 0;
+  state.currentHandIndex = 0;
+  state.lastCards = {};
+
+  for (const p of state.players) {
+    p.inHand = p.tokens >= state.config.minBet;
+  }
+  if (countInHand(state) < 1) {
+    settleSession(state, "gameover");
+    return;
+  }
+  if (!state.players[state.currentIndex]?.inHand) {
+    state.currentIndex = nextInHandIndex(state, state.currentIndex);
+  }
+  state.firstActorIndex = state.currentIndex;
+  state.phase = "betting";
+}
+
+function dealTo(state: TableState, cards: Card[]): Card {
+  const card = draw(state);
+  cards.push(card);
+  return card;
+}
+
+function finishHandStatus(hand: HandState): void {
+  if (hand.status !== "open") return;
+  if (isBlackjack(hand.cards, hand.fromSplit)) {
+    hand.status = "blackjack";
+    return;
+  }
+  if (isBust(hand.cards)) {
+    hand.status = "bust";
+    return;
+  }
+  if (hand.cards.length >= 2 && handValue(hand.cards).total === 21) {
+    hand.status = "stood";
+  }
+}
+
+function liveHandsRemain(state: TableState): boolean {
+  for (const p of state.players) {
+    if (!p.inHand) continue;
+    const seat = state.lastCards[p.id];
+    if (!seat) continue;
+    for (const hand of seat.hands) {
+      if (hand.status === "surrender" || hand.status === "bust") continue;
+      if (hand.cards.length > 0) return true;
+    }
+  }
+  return false;
+}
+
+function settleRound(state: TableState): void {
+  state.dealerRevealed = true;
+  const dealerLabel = isBlackjack(state.dealer)
+    ? "黑杰克"
+    : isBust(state.dealer)
+      ? "爆牌"
+      : handLabel(state.dealer);
+  pushLog(state, "dealer", `${DEALER_NAME} ${state.dealer.map(cardLabel).join(" ")}，${dealerLabel}`);
+
+  let firstOutcome: RevealOutcome | null = null;
+  for (const player of state.players) {
+    const seat = state.lastCards[player.id];
+    if (!seat) continue;
+    for (const hand of seat.hands) {
+      if (hand.cards.length === 0) continue;
+      const { kind, payout } = payoutFor(hand, state.dealer);
+      const outcome: RevealOutcome = { kind, amount: payout, wager: hand.bet };
+      hand.outcome = outcome;
+      player.tokens += payout;
+      state.pot = Math.max(0, state.pot - hand.bet);
+      if (!firstOutcome) firstOutcome = outcome;
+      const verb =
+        kind === "blackjack"
+          ? "黑杰克"
+          : kind === "win"
+            ? "赢"
+            : kind === "push"
+              ? "平"
+              : kind === "bust"
+                ? "爆牌"
+                : kind === "surrender"
+                  ? "投降"
+                  : "输";
+      pushLog(
+        state,
+        kind,
+        `${player.name} ${verb}${payout > 0 ? `，收回 ${formatTokens(payout)} Tokens` : ""}`,
+        { playerId: player.id, name: player.name, amount: payout },
+      );
+    }
+  }
+  state.pot = 0;
+  state.outcome = firstOutcome;
+  state.phase = "reveal";
   state.dealsThisHand += 1;
-  state.orbitDeals += 1;
-  state.lastCards[player.id] = { hole: [a, b] };
+}
 
-  pushLog(state, "deal", `${player.name} 获得 ${cardLabel(a)} ${cardLabel(b)}`, {
-    playerId: player.id,
-    name: player.name,
-  });
+function playDealerThenSettle(state: TableState): void {
+  if (liveHandsRemain(state) && !isBlackjack(state.dealer)) {
+    while (dealerShouldHit(state.dealer)) {
+      dealTo(state, state.dealer);
+    }
+  }
+  settleRound(state);
+}
 
-  if (holeKind(a, b) === "consecutive") {
-    const outcome: RevealOutcome = { kind: "consecutive", amount: 0 };
-    state.outcome = outcome;
-    state.lastCards[player.id] = { hole: [a, b], outcome };
-    state.phase = "reveal";
-    pushLog(state, "consecutive", `${player.name} 连张，系统自动放弃`, {
-      playerId: player.id,
-      name: player.name,
-    });
+function findNextOpenHand(
+  state: TableState,
+  fromPlayer: number,
+  fromHand: number,
+): { playerIndex: number; handIndex: number } | null {
+  const n = state.players.length;
+  for (let step = 0; step < n; step++) {
+    const idx = (fromPlayer + step) % n;
+    const player = state.players[idx]!;
+    if (!player.inHand) continue;
+    const seat = state.lastCards[player.id];
+    if (!seat) continue;
+    const startHand = step === 0 ? fromHand : 0;
+    for (let h = startHand; h < seat.hands.length; h++) {
+      const hand = seat.hands[h]!;
+      finishHandStatus(hand);
+      if (hand.status === "open") return { playerIndex: idx, handIndex: h };
+    }
+  }
+  return null;
+}
+
+function ensureTwoCards(state: TableState, hand: HandState): void {
+  if (hand.status === "open" && hand.cards.length === 1) {
+    dealTo(state, hand.cards);
+    finishHandStatus(hand);
+  }
+}
+
+function afterHandResolved(state: TableState): void {
+  const next = findNextOpenHand(state, state.currentIndex, state.currentHandIndex + 1);
+  if (!next) {
+    playDealerThenSettle(state);
     return;
   }
-
-  const range = betRangeFor(player.tokens, [a, b], state.projectPool, state.config);
-  if (!range) {
-    const outcome: RevealOutcome = { kind: "fold", amount: 0 };
-    state.outcome = outcome;
-    state.lastCards[player.id] = { hole: [a, b], outcome };
-    state.phase = "reveal";
-    pushLog(state, "fold", `${player.name} 无法添菜，自动放弃`, {
-      playerId: player.id,
-      name: player.name,
-    });
+  state.currentIndex = next.playerIndex;
+  state.currentHandIndex = next.handIndex;
+  const seat = state.lastCards[state.players[next.playerIndex]!.id];
+  const hand = seat?.hands[next.handIndex];
+  if (hand) ensureTwoCards(state, hand);
+  if (!hand || hand.status !== "open") {
+    afterHandResolved(state);
     return;
   }
-
   state.phase = "awaiting";
 }
 
-function beginDealCycle(state: TableState): void {
-  if (maybeEndBeforeDeal(state)) return;
-  dealToCurrent(state);
-}
-
-function afterRevealAdvance(state: TableState): void {
-  if (state.phase !== "reveal") return;
-  if (maybeEndBeforeDeal(state)) return;
-  state.currentIndex = nextInHandIndex(state, state.currentIndex);
-  beginDealCycle(state);
-}
-
-export function betRangeFor(
-  tokens: number,
-  hole: [Card, Card],
-  pool: number,
-  config: TableConfig,
-): BetRange | null {
-  const kind = holeKind(hole[0], hole[1]);
-  if (kind === "consecutive") return null;
-
-  const half = Math.floor(tokens / 2);
-  const max = Math.min(pool, half, config.maxAdd);
-  const min = Math.min(config.minAdd, pool);
-  if (min <= 0 || max <= 0 || min > max) return null;
-
-  if (kind === "pair") {
-    const locked = Math.min(config.minAdd, max);
-    if (locked <= 0) return null;
-    return { min: locked, max: locked, locked: true };
+function dealRound(state: TableState): void {
+  if (state.deck.length < 20) shuffleDeck(state);
+  const order: number[] = [];
+  let idx = state.firstActorIndex;
+  for (let i = 0; i < state.players.length; i++) {
+    if (state.players[idx]!.inHand) order.push(idx);
+    idx = (idx + 1) % state.players.length;
   }
-  return { min, max, locked: false };
+
+  for (const i of order) {
+    const player = state.players[i]!;
+    const seat = seatOf(state, player.id);
+    const hand = seat.hands[0]!;
+    dealTo(state, hand.cards);
+  }
+  dealTo(state, state.dealer);
+  for (const i of order) {
+    const player = state.players[i]!;
+    const hand = state.lastCards[player.id]!.hands[0]!;
+    dealTo(state, hand.cards);
+    finishHandStatus(hand);
+    pushLog(
+      state,
+      "deal",
+      `${player.name} 获得 ${hand.cards.map(cardLabel).join(" ")}（${handLabel(hand.cards, hand.fromSplit)}）`,
+      { playerId: player.id, name: player.name },
+    );
+  }
+  dealTo(state, state.dealer);
+  pushLog(state, "deal", `${DEALER_NAME} 明牌 ${cardLabel(state.dealer[0]!)}`);
+
+  if (isBlackjack(state.dealer)) {
+    playDealerThenSettle(state);
+    return;
+  }
+
+  const first = findNextOpenHand(state, state.firstActorIndex, 0);
+  if (!first) {
+    playDealerThenSettle(state);
+    return;
+  }
+  state.currentIndex = first.playerIndex;
+  state.currentHandIndex = first.handIndex;
+  state.phase = "awaiting";
 }
 
-export function computeBetRange(state: TableState): BetRange | null {
-  if (state.phase !== "awaiting" || !state.hole) return null;
-  const player = state.players[state.currentIndex];
-  if (!player) return null;
-  return betRangeFor(player.tokens, state.hole, state.projectPool, state.config);
+function afterBetAdvance(state: TableState): void {
+  const n = state.players.length;
+  for (let step = 1; step <= n; step++) {
+    const idx = (state.currentIndex + step) % n;
+    const player = state.players[idx]!;
+    if (!player.inHand) continue;
+    const bet = state.lastCards[player.id]?.hands[0]?.bet ?? 0;
+    if (bet <= 0) {
+      state.currentIndex = idx;
+      state.phase = "betting";
+      return;
+    }
+  }
+  dealRound(state);
 }
 
 export function createTable(
@@ -267,14 +395,14 @@ export function createTable(
     phase: "idle",
     rng: seed,
     deck: [],
-    projectPool: 0,
+    dealer: [],
+    dealerRevealed: false,
+    pot: 0,
     firstActorIndex: 0,
     currentIndex: 0,
-    orbitDeals: 0,
+    currentHandIndex: 0,
     dealsThisHand: 0,
     handNumber: 0,
-    hole: null,
-    third: null,
     outcome: null,
     logs: [],
     logSeq: 0,
@@ -288,34 +416,23 @@ export function startHand(state: TableState): TableState {
   const next = clone(state);
   next.settlement = null;
   next.outcome = null;
-  next.hole = null;
-  next.third = null;
   next.lastCards = {};
   next.dealsThisHand = 0;
-  next.orbitDeals = 0;
   next.handNumber += 1;
+  next.dealer = [];
+  next.dealerRevealed = false;
+  next.pot = 0;
+  next.currentHandIndex = 0;
 
   const tokensAtHandStart: Record<string, number> = {};
-  const ante = next.config.ante;
   for (const p of next.players) {
     tokensAtHandStart[p.id] = p.tokens;
-    if (ante > 0 && p.tokens >= ante) {
-      p.tokens -= ante;
-      next.projectPool += ante;
-      p.inHand = true;
-      pushLog(next, "ante", `${p.name} 向${POOL_NAME}投入底注 ${formatTokens(ante)} Tokens`, {
-        playerId: p.id,
-        name: p.name,
-        amount: ante,
-      });
-    } else {
-      p.inHand = false;
-    }
+    p.inHand = p.tokens >= next.config.minBet;
   }
   next.tokensAtHandStart = tokensAtHandStart;
 
-  if (countInHand(next) < 2) {
-    settle(next, "gameover");
+  if (countInHand(next) < 1) {
+    settleSession(next, "gameover");
     return next;
   }
 
@@ -336,109 +453,191 @@ export function startHand(state: TableState): TableState {
   }
 
   shuffleDeck(next);
-  beginDealCycle(next);
+  beginBetting(next);
   return next;
 }
 
-export function applyAction(state: TableState, playerId: string, action: PlayerAction): TableState {
-  if (state.phase !== "awaiting" || !state.hole) {
-    throw new Error("当前不能行动");
+function applyBet(state: TableState, amount: number): void {
+  const player = state.players[state.currentIndex];
+  if (!player) throw new Error("没有当前玩家");
+  const range = betRangeFor(player.tokens, state.config);
+  if (!range) throw new Error("筹码不足，无法下注");
+  if (amount < range.min || amount > range.max) throw new Error("下注数量不合法");
+  player.tokens -= amount;
+  state.pot += amount;
+  const seat = seatOf(state, player.id);
+  seat.hands = [{ cards: [], bet: amount, status: "open", fromSplit: false }];
+  pushLog(state, "bet", `${player.name} 下注 ${formatTokens(amount)} Tokens`, {
+    playerId: player.id,
+    name: player.name,
+    amount,
+  });
+  afterBetAdvance(state);
+}
+
+function standHand(state: TableState, hand: HandState, player: Player, silent = false): void {
+  if (hand.status === "open") {
+    finishHandStatus(hand);
+    if (hand.status === "open") hand.status = "stood";
   }
+  if (!silent) {
+    pushLog(state, "stand", `${player.name} 停牌，${handLabel(hand.cards, hand.fromSplit)}`, {
+      playerId: player.id,
+      name: player.name,
+    });
+  }
+  afterHandResolved(state);
+}
+
+function applyHit(state: TableState): void {
+  const cur = currentSeat(state);
+  if (!cur) throw new Error("当前没有手牌");
+  if (!canHit(cur.hand)) throw new Error("不能要牌");
+  const card = dealTo(state, cur.hand.cards);
+  pushLog(
+    state,
+    "hit",
+    `${cur.player.name} 要牌 ${cardLabel(card)}，${handLabel(cur.hand.cards, cur.hand.fromSplit)}`,
+    { playerId: cur.player.id, name: cur.player.name },
+  );
+  finishHandStatus(cur.hand);
+  if (cur.hand.status === "bust") {
+    pushLog(state, "bust", `${cur.player.name} 爆牌`, {
+      playerId: cur.player.id,
+      name: cur.player.name,
+    });
+    afterHandResolved(state);
+    return;
+  }
+  if (cur.hand.status !== "open" || !canHit(cur.hand)) {
+    if (cur.hand.status === "open") cur.hand.status = "stood";
+    afterHandResolved(state);
+  }
+}
+
+function applyDouble(state: TableState): void {
+  const cur = currentSeat(state);
+  if (!cur) throw new Error("当前没有手牌");
+  const extra = cur.hand.bet;
+  if (cur.player.tokens < extra) throw new Error("筹码不足，无法加倍");
+  if (cur.hand.cards.length !== 2) throw new Error("只能在前两张加倍");
+  if (isBlackjack(cur.hand.cards, cur.hand.fromSplit)) throw new Error("黑杰克不能加倍");
+  cur.player.tokens -= extra;
+  cur.hand.bet += extra;
+  state.pot += extra;
+  const card = dealTo(state, cur.hand.cards);
+  pushLog(
+    state,
+    "double",
+    `${cur.player.name} 加倍，补 ${cardLabel(card)}，${handLabel(cur.hand.cards, cur.hand.fromSplit)}`,
+    { playerId: cur.player.id, name: cur.player.name, amount: extra },
+  );
+  if (isBust(cur.hand.cards)) {
+    cur.hand.status = "bust";
+    pushLog(state, "bust", `${cur.player.name} 爆牌`, {
+      playerId: cur.player.id,
+      name: cur.player.name,
+    });
+  } else {
+    cur.hand.status = "stood";
+  }
+  afterHandResolved(state);
+}
+
+function applySplit(state: TableState): void {
+  const cur = currentSeat(state);
+  if (!cur) throw new Error("当前没有手牌");
+  if (cur.hand.fromSplit) throw new Error("不能再分牌");
+  if (cur.hand.cards.length !== 2 || cur.hand.cards[0]!.rank !== cur.hand.cards[1]!.rank) {
+    throw new Error("只有同点对子可以分牌");
+  }
+  const extra = cur.hand.bet;
+  if (cur.player.tokens < extra) throw new Error("筹码不足，无法分牌");
+  cur.player.tokens -= extra;
+  state.pot += extra;
+  const second: Card = cur.hand.cards.pop()!;
+  const right: HandState = {
+    cards: [second],
+    bet: extra,
+    status: "open",
+    fromSplit: true,
+  };
+  cur.hand.fromSplit = true;
+  cur.seat.hands.splice(state.currentHandIndex + 1, 0, right);
+  dealTo(state, cur.hand.cards);
+  finishHandStatus(cur.hand);
+  pushLog(state, "split", `${cur.player.name} 分牌`, {
+    playerId: cur.player.id,
+    name: cur.player.name,
+    amount: extra,
+  });
+  if (cur.hand.cards[0]!.rank === 1) {
+    // 分牌 A 各补一张后停
+    dealTo(state, right.cards);
+    cur.hand.status = cur.hand.status === "open" ? "stood" : cur.hand.status;
+    right.status = "stood";
+    afterHandResolved(state);
+    return;
+  }
+  if (cur.hand.status !== "open") {
+    afterHandResolved(state);
+  }
+}
+
+function applySurrender(state: TableState): void {
+  const cur = currentSeat(state);
+  if (!cur) throw new Error("当前没有手牌");
+  if (cur.hand.cards.length !== 2 || cur.hand.fromSplit) throw new Error("现在不能投降");
+  if (state.dealer[0]?.rank === 1) throw new Error("庄家明牌是 A，不能投降");
+  cur.hand.status = "surrender";
+  pushLog(state, "surrender", `${cur.player.name} 投降，收回一半赌注`, {
+    playerId: cur.player.id,
+    name: cur.player.name,
+  });
+  afterHandResolved(state);
+}
+
+export function applyAction(state: TableState, playerId: string, action: PlayerAction): TableState {
   const player = state.players[state.currentIndex];
   if (!player || player.id !== playerId) {
     throw new Error("还没轮到该玩家");
   }
+  if (state.phase !== "betting" && state.phase !== "awaiting") {
+    throw new Error("当前不能行动");
+  }
+  if (state.phase === "betting" && action.type !== "bet") {
+    throw new Error("现在请先下注");
+  }
+  if (state.phase === "awaiting" && action.type === "bet") {
+    throw new Error("已经下过注了");
+  }
 
   const next = clone(state);
-  const actor = next.players[next.currentIndex]!;
-  const hole = next.hole!;
-
-  if (action.type === "fold") {
-    const outcome: RevealOutcome = { kind: "fold", amount: 0 };
-    next.outcome = outcome;
-    next.lastCards[actor.id] = { hole, outcome };
-    next.phase = "reveal";
-    pushLog(next, "fold", `${actor.name} 放弃`, { playerId: actor.id, name: actor.name });
+  if (action.type === "bet") {
+    applyBet(next, action.amount);
     return next;
   }
-
-  const range = computeBetRange(next);
-  if (!range) throw new Error("无法添菜");
-  const amount = action.amount;
-  if (amount < range.min || amount > range.max) {
-    throw new Error("添菜数量不合法");
+  const allowed = legalActions(next);
+  if (!allowed.includes(action.type as ActionType)) {
+    throw new Error("该行动不合法");
   }
-
-  const third = draw(next);
-  next.third = third;
-  pushLog(next, "add", `${actor.name} 向${POOL_NAME}添菜 ${formatTokens(amount)} Tokens`, {
-    playerId: actor.id,
-    name: actor.name,
-    amount,
-  });
-
-  const kind = holeKind(hole[0], hole[1]);
-  let outcome: RevealOutcome;
-
-  if (kind === "pair") {
-    if (third.rank === hole[0].rank) {
-      const won = transferFromPool(next, actor, next.projectPool);
-      outcome = { kind: "triple_win", amount: won, wager: amount, third };
-      pushLog(next, "triple_win", `${actor.name} 开出三张，通吃${POOL_NAME} ${formatTokens(won)} Tokens`, {
-        playerId: actor.id,
-        name: actor.name,
-        amount: won,
-      });
-    } else {
-      const lost = transferToPool(next, actor, amount);
-      outcome = { kind: "triple_lose", amount: lost, wager: amount, third };
-      pushLog(next, "triple_lose", `${actor.name} 未开出三张，扣除 ${formatTokens(lost)} Tokens`, {
-        playerId: actor.id,
-        name: actor.name,
-        amount: lost,
-      });
-    }
-  } else {
-    const { low, high } = orderedRanks(hole[0], hole[1]);
-    if (third.rank === hole[0].rank || third.rank === hole[1].rank) {
-      const multiplier = isAceKing(hole[0], hole[1]) ? 4 : 2;
-      const lost = transferToPool(next, actor, amount * multiplier);
-      outcome = { kind: "horn", amount: lost, wager: amount, multiplier, third };
-      pushLog(
-        next,
-        "horn",
-        `${actor.name} 钻了${multiplier === 4 ? "超级牛角尖" : "牛角尖"}（×${multiplier}），扣除 ${formatTokens(lost)} Tokens`,
-        { playerId: actor.id, name: actor.name, amount: lost },
-      );
-    } else if (third.rank > low && third.rank < high) {
-      const won = transferFromPool(next, actor, amount);
-      outcome = { kind: "win", amount: won, wager: amount, third };
-      pushLog(next, "win", `${actor.name} 吃进${POOL_NAME} ${formatTokens(won)} Tokens`, {
-        playerId: actor.id,
-        name: actor.name,
-        amount: won,
-      });
-    } else {
-      const lost = transferToPool(next, actor, amount);
-      outcome = { kind: "lose", amount: lost, wager: amount, third };
-      pushLog(next, "lose", `${actor.name} 未中区间，投入${POOL_NAME} ${formatTokens(lost)} Tokens`, {
-        playerId: actor.id,
-        name: actor.name,
-        amount: lost,
-      });
-    }
-  }
-
-  next.outcome = outcome;
-  next.lastCards[actor.id] = { hole, third, outcome };
-  next.phase = "reveal";
+  if (action.type === "hit") applyHit(next);
+  else if (action.type === "stand") {
+    const cur = currentSeat(next);
+    if (!cur) throw new Error("当前没有手牌");
+    standHand(next, cur.hand, cur.player);
+  } else if (action.type === "double") applyDouble(next);
+  else if (action.type === "split") applySplit(next);
+  else if (action.type === "surrender") applySurrender(next);
   return next;
 }
 
 export function advance(state: TableState): TableState {
   if (state.phase !== "reveal") return state;
   const next = clone(state);
-  afterRevealAdvance(next);
+  next.outcome = null;
+  next.currentIndex = nextInHandIndex(next, next.firstActorIndex);
+  beginBetting(next);
   return next;
 }
 
@@ -448,10 +647,23 @@ export function continueFromSettlement(state: TableState): TableState {
   return startHand(state);
 }
 
+function publicDealer(state: TableState): PublicDealer {
+  const show = state.dealerRevealed || state.phase === "reveal" || state.phase === "settlement";
+  const cards = show ? state.dealer : state.dealer.slice(0, 1);
+  const total = show && state.dealer.length ? handValue(state.dealer).total : null;
+  return {
+    cards,
+    hidden: !show && state.dealer.length > 1,
+    total,
+    bust: Boolean(show && isBust(state.dealer)),
+    blackjack: Boolean(show && isBlackjack(state.dealer)),
+  };
+}
+
 export function toPublicState(state: TableState): PublicState {
-  const current = state.phase === "awaiting" || state.phase === "reveal"
-    ? state.players[state.currentIndex]
-    : undefined;
+  const acting = state.phase === "betting" || state.phase === "awaiting";
+  const current = acting ? state.players[state.currentIndex] : undefined;
+  const cur = acting ? currentSeat(state) : null;
   return {
     phase: state.phase,
     config: state.config,
@@ -464,18 +676,18 @@ export function toPublicState(state: TableState): PublicState {
       inHand: p.inHand,
       cards: state.lastCards[p.id],
     })),
-    projectPool: state.projectPool,
+    dealer: publicDealer(state),
+    pot: state.pot,
     currentIndex: state.currentIndex,
     currentPlayerId: current?.id ?? null,
+    currentHandIndex: state.currentHandIndex,
     firstActorIndex: state.firstActorIndex,
-    orbitDeals: state.orbitDeals,
     dealsThisHand: state.dealsThisHand,
     handNumber: state.handNumber,
-    hole: state.hole,
-    third: state.third,
     outcome: state.outcome,
-    hint: state.hole ? holeHint(state.hole[0], state.hole[1]) : null,
+    hint: cur ? hintFor(cur.hand.cards, state.dealer[0], cur.hand.fromSplit) : null,
     betRange: computeBetRange(state),
+    legalActions: legalActions(state),
     logs: state.logs.slice(-24),
     settlement: state.settlement,
   };
@@ -485,25 +697,55 @@ export function currentPlayer(state: TableState): Player | undefined {
   return state.players[state.currentIndex];
 }
 
-export { playerName };
+export function forceBetting(state: TableState, playerIndex: number): TableState {
+  const next = clone(state);
+  next.phase = "betting";
+  next.currentIndex = playerIndex;
+  next.currentHandIndex = 0;
+  next.dealer = [];
+  next.dealerRevealed = false;
+  next.outcome = null;
+  next.settlement = null;
+  next.lastCards = {};
+  next.pot = 0;
+  for (const p of next.players) p.inHand = p.tokens >= next.config.minBet;
+  next.players[playerIndex]!.inHand = true;
+  return next;
+}
 
-/** Test helper: put the current player into awaiting with a known hole. Upcoming cards are dealt via pop(). */
-export function forceAwaiting(
+/** Upcoming cards are dealt via pop() (last item first). */
+export function forcePlaying(
   state: TableState,
   playerIndex: number,
-  hole: [Card, Card],
+  cards: Card[],
+  dealer: Card[],
   upcoming: Card[] = [],
+  bet = state.config.minBet,
 ): TableState {
   const next = clone(state);
   next.phase = "awaiting";
   next.currentIndex = playerIndex;
-  next.hole = hole;
-  next.third = null;
+  next.currentHandIndex = 0;
+  next.dealer = [...dealer];
+  next.dealerRevealed = false;
   next.outcome = null;
   next.settlement = null;
+  next.pot = 0;
+  for (const p of next.players) p.inHand = false;
   const player = next.players[playerIndex]!;
   player.inHand = true;
-  next.lastCards[player.id] = { hole };
+  const paid = Math.min(bet, player.tokens);
+  player.tokens -= paid;
+  const hand: HandState = {
+    cards: [...cards],
+    bet: paid,
+    status: "open",
+    fromSplit: false,
+  };
+  finishHandStatus(hand);
+  next.lastCards = { [player.id]: { hands: [hand] } };
+  next.pot = paid;
   next.deck = [...upcoming].reverse();
+  if (hand.status !== "open") playDealerThenSettle(next);
   return next;
 }

@@ -26,10 +26,10 @@ export function Lobby({
     <div className="lobby">
       <header className="lobby-hero">
         <p className="eyebrow">
-          底注 {formatTokens(DEFAULT_CONFIG.ante)}/人 · 最小添菜 {formatTokens(DEFAULT_CONFIG.minAdd)}
+          最小 {formatTokens(DEFAULT_CONFIG.minBet)} · 最大 {formatTokens(DEFAULT_CONFIG.maxBet)}
         </p>
-        <h1>吃火锅</h1>
-        <p className="lede">把筹码投进许愿池。区间内吃进，牛角尖加倍，三张通吃。</p>
+        <h1>21点</h1>
+        <p className="lede">闲家对庄家比点数。要牌、停牌、加倍、分牌，靠近 21 但不要爆。</p>
       </header>
       <section className="panel">
         <label>

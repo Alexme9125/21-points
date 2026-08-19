@@ -1,124 +1,159 @@
 import { styleForPersona, type PlayStyle } from "./personas.js";
-import { holeKind } from "./rules.js";
+import { canHit, handValue, isBlackjack, legalActions, pipValue } from "./rules.js";
 import { computeBetRange, currentPlayer } from "./table.js";
-import type { BetRange, Card, PlayerAction, Rank, TableState } from "./types.js";
+import type { ActionType, Card, HandState, PlayerAction, TableState } from "./types.js";
 
-function countRank(cards: Card[], rank: Rank): number {
-  return cards.filter((c) => c.rank === rank).length;
+function dealerUp(state: TableState): number {
+  const card = state.dealer[0];
+  if (!card) return 10;
+  const v = pipValue(card.rank);
+  return card.rank === 1 ? 11 : v;
 }
 
-export interface SpotEval {
-  unitEv: number;
-  pWin: number;
-  kind: ReturnType<typeof holeKind>;
+function currentHand(state: TableState): HandState | null {
+  const player = currentPlayer(state);
+  if (!player) return null;
+  return state.lastCards[player.id]?.hands[state.currentHandIndex] ?? null;
 }
 
-export function evaluateSpot(state: TableState): SpotEval | null {
-  if (!state.hole) return null;
-  const hole = state.hole;
-  const kind = holeKind(hole[0], hole[1]);
-  const remain = state.deck;
-  const total = remain.length || 1;
-  const range = computeBetRange(state);
+/** Basic-strategy-ish play, then persona wobble. */
+export function basicPlay(
+  cards: Card[],
+  fromSplit: boolean,
+  dealerUpValue: number,
+  actions: ActionType[],
+): ActionType {
+  const { total, soft } = handValue(cards);
+  const up = dealerUpValue;
+  const pair = !fromSplit && cards.length === 2 && cards[0]!.rank === cards[1]!.rank;
+  const rank = cards[0]?.rank;
 
-  if (kind === "pair") {
-    const hits = countRank(remain, hole[0].rank);
-    const pHit = hits / total;
-    const stake = range?.min ?? 1;
-    const ev = pHit * state.projectPool - (1 - pHit) * stake;
-    return { kind, pWin: pHit, unitEv: ev / Math.max(stake, 1) };
+  if (pair && actions.includes("split") && rank !== undefined) {
+    if (rank === 1 || rank === 8) return "split";
+    if (rank === 9 && up !== 7 && up !== 10 && up !== 11) return "split";
+    if (rank === 7 && up <= 7) return "split";
+    if (rank === 6 && up >= 2 && up <= 6) return "split";
+    if ((rank === 2 || rank === 3) && up >= 2 && up <= 7) return "split";
   }
 
-  const low = Math.min(hole[0].rank, hole[1].rank);
-  const high = Math.max(hole[0].rank, hole[1].rank);
-  let win = 0;
-  let horn = 0;
-  let lose = 0;
-  for (const card of remain) {
-    if (card.rank === hole[0].rank || card.rank === hole[1].rank) horn += 1;
-    else if (card.rank > low && card.rank < high) win += 1;
-    else lose += 1;
+  if (actions.includes("surrender")) {
+    if (!soft && total === 16 && up >= 9) return "surrender";
+    if (!soft && total === 15 && up === 10) return "surrender";
   }
-  const pWin = win / total;
-  const pHorn = horn / total;
-  const pLose = lose / total;
-  const mult = low === 1 && high === 13 ? 4 : 2;
-  return { kind, pWin, unitEv: pWin - pLose - pHorn * mult };
+
+  if (soft) {
+    if (total >= 19) return "stand";
+    if (total === 18) {
+      if (actions.includes("double") && up >= 3 && up <= 6) return "double";
+      if (up >= 9) return "hit";
+      return "stand";
+    }
+    if (total === 17) {
+      if (actions.includes("double") && up >= 3 && up <= 6) return "double";
+      return "hit";
+    }
+    if (actions.includes("double") && up >= 5 && up <= 6) return "double";
+    if (actions.includes("double") && total >= 15 && up === 4) return "double";
+    return "hit";
+  }
+
+  if (total >= 17) return "stand";
+  if (total >= 13 && total <= 16) return up >= 2 && up <= 6 ? "stand" : "hit";
+  if (total === 12) return up >= 4 && up <= 6 ? "stand" : "hit";
+  if (total === 11) {
+    if (actions.includes("double") && up !== 11) return "double";
+    return "hit";
+  }
+  if (total === 10) {
+    if (actions.includes("double") && up <= 9) return "double";
+    return "hit";
+  }
+  if (total === 9) {
+    if (actions.includes("double") && up >= 3 && up <= 6) return "double";
+    return "hit";
+  }
+  return actions.includes("hit") ? "hit" : "stand";
 }
 
-function shouldFold(style: PlayStyle, spot: SpotEval): boolean {
+function deviate(style: PlayStyle, action: ActionType, total: number, soft: boolean, actions: ActionType[]): ActionType {
   const wobble = (Math.random() * 2 - 1) * style.mood;
-  const line = style.foldBelow + wobble;
-  if (spot.unitEv <= line) return true;
-  const over = spot.unitEv - line;
-  if (over < 0.16 && Math.random() < style.scratch * (1 - over / 0.16)) return true;
-  return false;
-}
-
-function heatFromEv(unitEv: number): number {
-  return Math.max(0, Math.min(1, (unitEv + 0.42) / 0.72));
-}
-
-function pickAmount(range: BetRange, style: PlayStyle, spot: SpotEval): number {
-  const heat = heatFromEv(spot.unitEv);
-  const low = 0.05 + style.sizeBias * 0.08;
-  const high = 0.32 + style.sizeBias * 0.62;
-  let fraction = low + (high - low) * heat ** 0.9;
-
-  const shoveHeat =
-    Math.max(0, (spot.unitEv - 0.2) / 0.22) * Math.max(0, (spot.pWin - 0.6) / 0.28);
-  const shoveP = Math.min(0.75, style.shove * shoveHeat);
-  if (Math.random() < shoveP) {
-    fraction = 1;
-  } else {
-    fraction *= 1 + (Math.random() * 2 - 1) * 0.12;
+  const stiff = !soft && total >= 12 && total <= 16;
+  if (stiff && action === "hit" && actions.includes("stand") && Math.random() < style.scratch + wobble) {
+    return "stand";
   }
+  if (stiff && action === "stand" && actions.includes("hit") && Math.random() < style.shove * 0.35 + wobble) {
+    return "hit";
+  }
+  if (action === "hit" && actions.includes("double") && Math.random() < style.shove * 0.25) {
+    return "double";
+  }
+  if (action === "surrender" && Math.random() < style.shove * 0.4) {
+    return actions.includes("hit") ? "hit" : "stand";
+  }
+  return action;
+}
 
-  fraction = Math.max(0.04, Math.min(1, fraction));
+function pickBet(state: TableState, style: PlayStyle): PlayerAction {
+  const range = computeBetRange(state);
+  if (!range) return { type: "bet", amount: state.config.minBet };
+  const low = 0.0;
+  const high = 0.28 + style.sizeBias * 0.72;
+  let fraction = low + (high - low) * (0.35 + style.sizeBias * 0.5);
+  if (Math.random() < style.shove * 0.18) fraction = 1;
+  else fraction *= 1 + (Math.random() * 2 - 1) * 0.14;
+  fraction = Math.max(0, Math.min(1, fraction));
   const raw = Math.round((range.min + (range.max - range.min) * fraction) / 1000) * 1000;
-  return Math.min(range.max, Math.max(range.min, raw || range.min));
+  const amount = Math.min(range.max, Math.max(range.min, raw || range.min));
+  return { type: "bet", amount };
 }
 
 export function chooseBotAction(state: TableState): PlayerAction {
   const player = currentPlayer(state);
-  if (!player || state.phase !== "awaiting" || !state.hole) {
-    return { type: "fold" };
-  }
-  const range = computeBetRange(state);
-  if (!range) return { type: "fold" };
+  if (!player) return { type: "stand" };
+  if (state.phase === "betting") return pickBet(state, styleForPersona(player.personaId));
+
+  const actions = legalActions(state);
+  const hand = currentHand(state);
+  if (!hand || actions.length === 0) return { type: "stand" };
 
   const style = styleForPersona(player.personaId);
-  const spot = evaluateSpot(state);
-  if (!spot) return { type: "fold" };
+  if (isBlackjack(hand.cards, hand.fromSplit)) return { type: "stand" };
 
-  if (shouldFold(style, spot)) return { type: "fold" };
-
-  if (range.locked) {
-    return { type: "add", amount: range.min };
+  let action = basicPlay(hand.cards, hand.fromSplit, dealerUp(state), actions);
+  if (!actions.includes(action)) {
+    action = actions.includes("stand") ? "stand" : (actions[0] ?? "stand");
   }
-
-  return { type: "add", amount: pickAmount(range, style, spot) };
+  const { total, soft } = handValue(hand.cards);
+  action = deviate(style, action, total, soft, actions);
+  if (!actions.includes(action)) {
+    action = actions.includes("stand") ? "stand" : (actions.includes("hit") && canHit(hand) ? "hit" : actions[0]!);
+  }
+  if (action === "bet") return { type: "stand" };
+  return { type: action };
 }
 
-/** Human-like tank: rarely snap, linger near the fold line, occasional extra pause. */
+export function evaluateSpot(state: TableState): { total: number; soft: boolean; stiff: boolean } | null {
+  const hand = currentHand(state);
+  if (!hand || hand.cards.length === 0) return null;
+  const { total, soft } = handValue(hand.cards);
+  return { total, soft, stiff: !soft && total >= 12 && total <= 16 };
+}
+
 export function botThinkMs(state: TableState): number {
   const player = currentPlayer(state);
   const style = styleForPersona(player?.personaId);
   const spot = evaluateSpot(state);
-  const dist = spot ? Math.abs(spot.unitEv - style.foldBelow) : 0.2;
-  const hesitation = Math.max(0, 1 - dist / 0.12);
+  const hesitation = spot?.stiff ? 1 : state.phase === "betting" ? 0.35 : 0.2;
   const triangular = (Math.random() + Math.random()) / 2;
   const span = style.thinkMax - style.thinkMin;
   const extraTank = Math.random() < 0.1 ? 800 + Math.random() * 1800 : 0;
-  const snap = dist > 0.24 && Math.random() < 0.18 ? -Math.min(1400, span * 0.22) : 0;
-  const pairBeat = spot?.kind === "pair" ? 400 : 0;
+  const snap = !spot?.stiff && Math.random() < 0.18 ? -Math.min(1400, span * 0.22) : 0;
   const ms =
     style.thinkMin +
     span * (0.22 + 0.58 * triangular) +
-    hesitation * 2000 +
+    hesitation * 1600 +
     extraTank +
     snap +
-    pairBeat +
     Math.random() * 500;
   return Math.round(Math.min(12_000, Math.max(3_600, ms)));
 }
