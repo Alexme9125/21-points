@@ -16,9 +16,9 @@ const c = (rank: Rank, suit: Suit = "spades"): Card => ({ rank, suit });
 function fourPlayers(): Pick<Player, "id" | "name" | "kind">[] {
   return [
     { id: "p1", name: "You", kind: "human" },
-    { id: "p2", name: "Claude", kind: "bot" },
-    { id: "p3", name: "GPT", kind: "bot" },
-    { id: "p4", name: "Kimi", kind: "bot" },
+    { id: "p2", name: "Tibo", kind: "bot" },
+    { id: "p3", name: "Linus", kind: "bot" },
+    { id: "p4", name: "Aqua", kind: "bot" },
   ];
 }
 

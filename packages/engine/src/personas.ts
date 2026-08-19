@@ -23,11 +23,12 @@ export interface LlmPersona {
   style: PlayStyle;
 }
 
+/** Table nicknames. `id` is an internal play-style key, not shown to players. */
 export const LLM_PERSONAS: readonly LlmPersona[] = [
   {
     id: "claude",
-    name: "Claude",
-    initials: "CL",
+    name: "Tibo",
+    initials: "TB",
     color: "#D97757",
     style: {
       foldBelow: -0.38,
@@ -42,8 +43,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "gpt",
-    name: "GPT",
-    initials: "GPT",
+    name: "Linus",
+    initials: "LI",
     color: "#10A37F",
     style: {
       foldBelow: -0.4,
@@ -58,8 +59,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "kimi",
-    name: "Kimi",
-    initials: "KI",
+    name: "Aqua",
+    initials: "AQ",
     color: "#1A1A1A",
     style: {
       foldBelow: -0.36,
@@ -74,8 +75,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "glm",
-    name: "GLM",
-    initials: "GLM",
+    name: "Alice",
+    initials: "AL",
     color: "#1A73E8",
     style: {
       foldBelow: -0.46,
@@ -90,8 +91,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "qwen",
-    name: "Qwen",
-    initials: "QW",
+    name: "Seth",
+    initials: "SE",
     color: "#615CED",
     style: {
       foldBelow: -0.48,
@@ -106,8 +107,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "grok",
-    name: "Grok",
-    initials: "GR",
+    name: "Nori",
+    initials: "NO",
     color: "#1D1D1F",
     style: {
       foldBelow: -0.54,
@@ -122,8 +123,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "gemini",
-    name: "Gemini",
-    initials: "GE",
+    name: "Milo",
+    initials: "MI",
     color: "#8E83F3",
     style: {
       foldBelow: -0.56,
@@ -138,8 +139,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "deepseek",
-    name: "DeepSeek",
-    initials: "DS",
+    name: "Vera",
+    initials: "VE",
     color: "#4D6BFE",
     style: {
       foldBelow: -0.58,
@@ -154,8 +155,8 @@ export const LLM_PERSONAS: readonly LlmPersona[] = [
   },
   {
     id: "minimax",
-    name: "MiniMax",
-    initials: "MM",
+    name: "Juno",
+    initials: "JU",
     color: "#7C5CFF",
     style: {
       foldBelow: -0.55,
