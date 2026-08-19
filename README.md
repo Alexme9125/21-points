@@ -1,8 +1,8 @@
 # 吃火锅
 
-武汉地区棋牌玩法「吃火锅」（癞子山庄）的网页对战。规则按[百度百科·吃火锅](https://baike.baidu.com/item/吃火锅/7980913)落地；界面做成浅色极简德州桌，货币为虚拟 **Tokens**，中央底池叫 **许愿池**。
+武汉地区棋牌玩法「吃火锅」（癞子山庄）的网页对战。
 
-人机座位从 Claude、GPT、Gemini、Grok、MiniMax、Qwen、DeepSeek、GLM、Kimi 中抽选，头像为仓库内原创几何标，不使用各厂官方 logo。
+规则按[百度百科·吃火锅](https://baike.baidu.com/item/吃火锅/7980913)。
 
 ## 本地开发
 
