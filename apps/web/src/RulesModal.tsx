@@ -30,7 +30,7 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
           <li>两张牌时若庄家明牌不是 A，可<b>投降</b>，收回一半赌注。</li>
           <li>前两张合计 21（A+10 点牌）是黑杰克，赔率 1 赔 2。普通赢局 1 赔 1，点数相同则平。</li>
           <li>庄家 16 及以下必须要牌，17 及以上停牌（含软 17）。闲家爆牌后，即使庄家也爆，仍算庄家赢。</li>
-          <li>本桌不设保险。满 24 局后结算本盘盈亏。</li>
+          <li>本桌不设保险。满 {DEFAULT_CONFIG.roundsUntilSettle} 局后结算本盘盈亏。</li>
         </ul>
         <button className="btn primary" onClick={onClose}>
           知道了

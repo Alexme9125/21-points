@@ -65,7 +65,7 @@ export function TableView({
   }, [state?.phase, turnKey]);
 
   const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}-${state?.dealer.cards.length ?? 0}-${play.showDealerHole}`;
-  const maxRounds = state?.config.roundsUntilSettle ?? 24;
+  const maxRounds = state?.config.roundsUntilSettle ?? DEFAULT_CONFIG.roundsUntilSettle;
   const minBet = state?.config.minBet ?? DEFAULT_CONFIG.minBet;
   const dealer = state?.dealer;
   const dealerCards = dealer?.cards ?? [];
