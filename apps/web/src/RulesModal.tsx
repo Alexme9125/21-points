@@ -1,3 +1,5 @@
+import { DEFAULT_CONFIG, formatTokens } from "@hotpot/engine";
+
 export function RulesModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) return null;
   return (
@@ -13,6 +15,11 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
             2–10 按点数，J/Q/K 算 10，A 可算 1 或 11。例如 A+8 是软 19，A+7+J 是 18。
           </li>
           <li>每人先下注，再发两张牌。庄家一张明牌、一张暗牌。</li>
+          <li>
+            开局 {formatTokens(DEFAULT_CONFIG.startingTokens)} Tokens。每局 {formatTokens(DEFAULT_CONFIG.minBet)}–
+            {formatTokens(DEFAULT_CONFIG.maxBet)}
+            ，快捷可点最小、2K、5K、最大；上一局之后可续注或续×2。
+          </li>
           <li>
             <b>要牌</b>继续拿牌；<b>停牌</b>不再拿。超过 21 即爆牌，立刻输掉这手。
           </li>

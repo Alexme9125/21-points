@@ -1,3 +1,4 @@
+import { isLegalBetAmount } from "./bets.js";
 import { cardLabel, makeDeck, shoeCut } from "./cards.js";
 import { formatTokens } from "./format.js";
 import { nextRng, shuffleInPlace } from "./rng.js";
@@ -417,6 +418,7 @@ export function createTable(
     logs: [],
     logSeq: 0,
     lastCards: {},
+    lastBets: {},
     tokensAtHandStart: {},
     settlement: null,
   };
@@ -472,9 +474,10 @@ function applyBet(state: TableState, amount: number): void {
   if (!player) throw new Error("没有当前玩家");
   const range = betRangeFor(player.tokens, state.config);
   if (!range) throw new Error("筹码不足，无法下注");
-  if (amount < range.min || amount > range.max) throw new Error("下注数量不合法");
+  if (!isLegalBetAmount(amount, range, state.config.minBet)) throw new Error("下注数量不合法");
   player.tokens -= amount;
   state.pot += amount;
+  state.lastBets[player.id] = amount;
   const seat = seatOf(state, player.id);
   seat.hands = [{ cards: [], bet: amount, status: "open", fromSplit: false }];
   pushLog(state, "bet", `${player.name} 下注 ${formatTokens(amount)} Tokens`, {
@@ -697,6 +700,7 @@ export function toPublicState(state: TableState): PublicState {
     outcome: state.outcome,
     hint: cur ? hintFor(cur.hand.cards, state.dealer[0], cur.hand.fromSplit) : null,
     betRange: computeBetRange(state),
+    lastBet: current ? (state.lastBets[current.id] ?? null) : null,
     legalActions: legalActions(state),
     logs: state.logs.slice(-24),
     settlement: state.settlement,
@@ -755,6 +759,7 @@ export function forcePlaying(
   finishHandStatus(hand);
   next.lastCards = { [player.id]: { hands: [hand] } };
   next.pot = paid;
+  next.lastBets = { ...next.lastBets, [player.id]: paid };
   next.deck = [...upcoming].reverse();
   if (hand.status !== "open") playDealerThenSettle(next);
   return next;

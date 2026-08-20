@@ -48,9 +48,9 @@ export interface TableConfig {
 }
 
 export const DEFAULT_CONFIG: TableConfig = {
-  startingTokens: 500_000,
-  minBet: 5_000,
-  maxBet: 100_000,
+  startingTokens: 100_000,
+  minBet: 1_000,
+  maxBet: 10_000,
   seatCount: 4,
   deckCount: 4,
   roundsUntilSettle: 24,
@@ -165,6 +165,7 @@ export interface TableState {
   logs: LogEntry[];
   logSeq: number;
   lastCards: Record<string, SeatCards>;
+  lastBets: Record<string, number>;
   tokensAtHandStart: Record<string, number>;
   settlement: Settlement | null;
 }
@@ -210,6 +211,8 @@ export interface PublicState {
   outcome: RevealOutcome | null;
   hint: HandHint | null;
   betRange: BetRange | null;
+  /** Current actor's previous wager this session, for 续注. */
+  lastBet: number | null;
   legalActions: ActionType[];
   logs: LogEntry[];
   settlement: Settlement | null;

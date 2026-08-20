@@ -204,6 +204,10 @@ export function TableView({
             range={state.betRange ?? null}
             actions={state.legalActions}
             disabled={lockedTurn === turnKey}
+            lastBet={state.lastBet ?? null}
+            wager={
+              seats.find((p) => p.id === room.you)?.cards?.hands[state.currentHandIndex ?? 0]?.bet ?? 0
+            }
             onBet={(amount) => act({ type: "bet", amount })}
             onHit={() => act({ type: "hit" })}
             onStand={() => act({ type: "stand" })}

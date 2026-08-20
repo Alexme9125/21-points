@@ -31,7 +31,8 @@ export function Lobby({
     <div className="lobby">
       <header className="lobby-hero">
         <p className="eyebrow">
-          最小 {formatTokens(DEFAULT_CONFIG.minBet)} · 最大 {formatTokens(DEFAULT_CONFIG.maxBet)}
+          开局 {formatTokens(DEFAULT_CONFIG.startingTokens)} · 最小 {formatTokens(DEFAULT_CONFIG.minBet)} · 最大{" "}
+          {formatTokens(DEFAULT_CONFIG.maxBet)}
         </p>
         <h1>21点</h1>
         <p className="lede">闲家对庄家比点数。要牌、停牌、加倍、分牌，靠近 21 但不要爆。</p>

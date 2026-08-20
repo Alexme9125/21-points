@@ -1,4 +1,11 @@
 export { makeDeck, cardLabel, rankLabel, isRed, cardKey, shoeCut, CARDS_PER_DECK } from "./cards.js";
+export {
+  betChipAmounts,
+  clampBet,
+  doubleLastBetAmount,
+  isLegalBetAmount,
+  repeatBetAmount,
+} from "./bets.js";
 export { formatTokens, initialsFromName } from "./format.js";
 export {
   LLM_PERSONAS,
