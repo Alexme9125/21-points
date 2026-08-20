@@ -51,6 +51,15 @@ export const DEFAULT_CONFIG: TableConfig = {
   roundsUntilSettle: 24,
 };
 
+export const MIN_SEATS = 1;
+export const MAX_SEATS = 6;
+
+export function clampSeatCount(n: unknown): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(v)) return DEFAULT_CONFIG.seatCount;
+  return Math.min(MAX_SEATS, Math.max(MIN_SEATS, Math.round(v)));
+}
+
 export const DEALER_NAME = "庄家";
 
 export type Phase = "idle" | "betting" | "awaiting" | "reveal" | "settlement" | "gameover";

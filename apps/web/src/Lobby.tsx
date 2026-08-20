@@ -1,11 +1,14 @@
-import { DEFAULT_CONFIG, formatTokens } from "@hotpot/engine";
+import { DEFAULT_CONFIG, formatTokens, MAX_SEATS, MIN_SEATS } from "@hotpot/engine";
 import { useState } from "react";
+import { SeatCountStepper } from "./SeatCountStepper";
 
 export function Lobby({
   name,
   onName,
   busy,
   error,
+  seatCount,
+  onSeatCount,
   onPve,
   onCreatePvp,
   onJoin,
@@ -15,6 +18,8 @@ export function Lobby({
   onName: (v: string) => void;
   busy: boolean;
   error: string;
+  seatCount: number;
+  onSeatCount: (n: number) => void;
   onPve: () => void;
   onCreatePvp: () => void;
   onJoin: (code: string) => void;
@@ -36,6 +41,13 @@ export function Lobby({
           昵称
           <input value={name} maxLength={16} onChange={(e) => onName(e.target.value)} placeholder="你的名字，桌上会显示" />
         </label>
+        <SeatCountStepper
+          value={seatCount}
+          min={MIN_SEATS}
+          max={MAX_SEATS}
+          disabled={busy}
+          onChange={onSeatCount}
+        />
         {error ? <p className="error">{error}</p> : null}
         <button className="btn primary lg" disabled={busy} onClick={onPve}>
           人机开局

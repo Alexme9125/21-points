@@ -50,6 +50,9 @@ export {
 export {
   DEFAULT_CONFIG,
   DEALER_NAME,
+  MIN_SEATS,
+  MAX_SEATS,
+  clampSeatCount,
   RANK_LABELS,
   type Card,
   type Rank,

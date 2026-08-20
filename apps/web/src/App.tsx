@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { clampSeatCount, DEFAULT_CONFIG } from "@hotpot/engine";
 import { Lobby } from "./Lobby";
 import { RulesModal } from "./RulesModal";
 import { TableView } from "./TableView";
@@ -16,6 +17,7 @@ import {
 import { armSoundUnlock } from "./sound";
 
 const RULES_KEY = "blackjack.rulesSeen";
+const SEATS_KEY = "blackjack.seatCount";
 
 function unreadRules(): boolean {
   try {
@@ -25,8 +27,18 @@ function unreadRules(): boolean {
   }
 }
 
+function savedSeatCount(): number {
+  try {
+    const raw = localStorage.getItem(SEATS_KEY);
+    return clampSeatCount(raw == null || raw === "" ? DEFAULT_CONFIG.seatCount : Number(raw));
+  } catch {
+    return DEFAULT_CONFIG.seatCount;
+  }
+}
+
 export function App() {
   const [name, setName] = useState(savedName() || "玩家");
+  const [seatCount, setSeatCount] = useState(savedSeatCount);
   const [room, setRoom] = useState<RoomSnapshot | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -89,7 +101,7 @@ export function App() {
     setError("");
     try {
       await ensureSession(name);
-      const snap = code ? await joinRoom(code) : await createRoom(mode);
+      const snap = code ? await joinRoom(code) : await createRoom(mode, seatCount);
       setRoom(snap);
     } catch (err) {
       setError(err instanceof Error ? err.message : "无法进入房间");
@@ -128,6 +140,15 @@ export function App() {
           onName={setName}
           busy={busy}
           error={error}
+          seatCount={seatCount}
+          onSeatCount={(n) => {
+            setSeatCount(n);
+            try {
+              localStorage.setItem(SEATS_KEY, String(n));
+            } catch {
+              /* ignore */
+            }
+          }}
           onPve={() => enter("pve")}
           onCreatePvp={() => enter("pvp")}
           onJoin={(code) => enter("pvp", code)}
@@ -148,6 +169,7 @@ export function App() {
         onContinue={() => send({ type: "continue" })}
         onLeave={exit}
         onFillBots={() => send({ type: "fill_bots" })}
+        onSetSeats={(n) => send({ type: "set_seats", seatCount: n })}
         onOpenRules={() => setRulesOpen(true)}
         onRename={(next) => {
           setName(next);

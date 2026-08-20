@@ -16,6 +16,7 @@ export interface RoomSnapshot {
   started: boolean;
   you: string;
   seats: Seat[];
+  seatCount: number;
   state: PublicState | null;
   deadline: number | null;
   status: string;
@@ -75,8 +76,8 @@ async function post<T>(url: string, body: unknown): Promise<T> {
   return data as T;
 }
 
-export function createRoom(mode: "pve" | "pvp") {
-  return post<RoomSnapshot>("/api/rooms", { token: token(), mode });
+export function createRoom(mode: "pve" | "pvp", seatCount?: number) {
+  return post<RoomSnapshot>("/api/rooms", { token: token(), mode, seatCount });
 }
 
 export function joinRoom(code: string) {

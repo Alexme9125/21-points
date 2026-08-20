@@ -4,7 +4,7 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
     <div className="overlay">
       <div className="modal wide" role="dialog" aria-modal="true" aria-labelledby="rules-title">
         <h2 id="rules-title">怎么玩</h2>
-        <p className="muted">四人闲家对一名庄家。目标是点数尽量接近 21，但不能超过。</p>
+        <p className="muted">1 到 6 名闲家对一名庄家。大厅或开局前可改人数。目标是点数尽量接近 21，但不能超过。</p>
         <ul className="rules">
           <li>
             2–10 按点数，J/Q/K 算 10，A 可算 1 或 11。例如 A+8 是软 19，A+7+J 是 18。

@@ -29,7 +29,7 @@ import type {
   TableConfig,
   TableState,
 } from "./types.js";
-import { DEALER_NAME, DEFAULT_CONFIG } from "./types.js";
+import { clampSeatCount, DEALER_NAME, DEFAULT_CONFIG, MAX_SEATS, MIN_SEATS } from "./types.js";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -381,7 +381,15 @@ export function createTable(
   config?: TableConfig,
   seed = Date.now() % 0x7fffffff,
 ): TableState {
-  const resolved: TableConfig = { ...DEFAULT_CONFIG, ...config };
+  const requested = config?.seatCount ?? players.length;
+  const resolved: TableConfig = {
+    ...DEFAULT_CONFIG,
+    ...config,
+    seatCount: clampSeatCount(requested),
+  };
+  if (players.length < MIN_SEATS || players.length > MAX_SEATS) {
+    throw new Error(`闲家人数须为 ${MIN_SEATS}–${MAX_SEATS} 人`);
+  }
   if (players.length !== resolved.seatCount) {
     throw new Error(`需要 ${resolved.seatCount} 名玩家`);
   }
