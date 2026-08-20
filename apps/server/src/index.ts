@@ -38,10 +38,10 @@ async function main() {
   });
 
   app.post("/api/rooms", async (req, reply) => {
-    const body = (req.body ?? {}) as { token?: string; mode?: "pve" | "pvp" };
+    const body = (req.body ?? {}) as { token?: string; mode?: "pve" | "pvp"; seatCount?: number };
     const session = requireSession(body.token);
     const mode = body.mode === "pvp" ? "pvp" : "pve";
-    const snap = createRoom(session, mode);
+    const snap = createRoom(session, mode, body.seatCount);
     return reply.send(snap);
   });
 

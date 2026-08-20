@@ -2,6 +2,7 @@ import { DEFAULT_THINK_LINES, formatTokens, handLabel, personaById, type PublicP
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { CardView } from "./CardView";
+import type { SeatPlace } from "./seats";
 
 export function SeatCapsule({
   player,
@@ -17,7 +18,7 @@ export function SeatCapsule({
   you: boolean;
   active: boolean;
   thinking: boolean;
-  place: "bottom" | "top" | "left" | "right";
+  place: SeatPlace;
   showCards: boolean;
   renameable?: boolean;
   onRename?: (name: string) => void;

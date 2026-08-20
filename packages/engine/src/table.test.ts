@@ -7,6 +7,9 @@ import {
   DEFAULT_CONFIG,
   forceBetting,
   forcePlaying,
+  MAX_SEATS,
+  MIN_SEATS,
+  clampSeatCount,
   startHand,
   toPublicState,
 } from "./index.js";
@@ -200,5 +203,28 @@ describe("table flow", () => {
     expect(DEFAULT_CONFIG.maxBet).toBe(100_000);
     expect(DEFAULT_CONFIG.roundsUntilSettle).toBe(24);
     expect(DEFAULT_CONFIG.startingTokens).toBe(500_000);
+    expect(DEFAULT_CONFIG.seatCount).toBe(4);
+  });
+
+  it("allows 1–6 seated players against the dealer", () => {
+    const solo = createTable([{ id: "p1", name: "You", kind: "human" }], { ...DEFAULT_CONFIG, seatCount: 1 }, 1);
+    expect(solo.config.seatCount).toBe(1);
+    expect(clampSeatCount(0)).toBe(MIN_SEATS);
+    expect(clampSeatCount(99)).toBe(MAX_SEATS);
+    const started = startHand(solo);
+    expect(started.phase).toBe("betting");
+    expect(started.players).toHaveLength(1);
+
+    const six = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i + 1}`,
+      name: `P${i + 1}`,
+      kind: "bot" as const,
+    }));
+    const table = createTable(six, { ...DEFAULT_CONFIG, seatCount: 6 }, 2);
+    expect(table.players).toHaveLength(6);
+
+    expect(() =>
+      createTable([{ id: "p1", name: "You", kind: "human" }], DEFAULT_CONFIG, 1),
+    ).toThrow(/需要 4/);
   });
 });

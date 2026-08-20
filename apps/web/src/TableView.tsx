@@ -1,21 +1,16 @@
-import { DEALER_NAME, DEFAULT_CONFIG, formatTokens, handLabel, type PlayerAction, type PublicPlayer } from "@hotpot/engine";
+import { DEALER_NAME, DEFAULT_CONFIG, formatTokens, handLabel, MAX_SEATS, MIN_SEATS, type PlayerAction, type PublicPlayer } from "@hotpot/engine";
 import { useEffect, useState } from "react";
 import { ActionBar } from "./ActionBar";
 import { CardView } from "./CardView";
 import { HintBar } from "./HintBar";
 import { SeatCapsule } from "./SeatCapsule";
+import { SeatCountStepper } from "./SeatCountStepper";
 import { SettlementModal } from "./SettlementModal";
 import { TableFx } from "./TableFx";
 import type { RoomSnapshot } from "./api";
+import { placeFor } from "./seats";
 import { useRevealPlay } from "./revealPlay";
 import { isSoundOn, setSoundOn, unlockSound } from "./sound";
-
-const PLACES = ["bottom", "right", "top", "left"] as const;
-
-function placeFor(viewerIndex: number, seatIndex: number, count: number): (typeof PLACES)[number] {
-  const offset = (seatIndex - viewerIndex + count) % count;
-  return PLACES[offset] ?? "bottom";
-}
 
 export function TableView({
   room,
@@ -25,6 +20,7 @@ export function TableView({
   onContinue,
   onLeave,
   onFillBots,
+  onSetSeats,
   onOpenRules,
   onRename,
 }: {
@@ -35,6 +31,7 @@ export function TableView({
   onContinue: () => void;
   onLeave: () => void;
   onFillBots: () => void;
+  onSetSeats: (n: number) => void;
   onOpenRules: () => void;
   onRename: (name: string) => void;
 }) {
@@ -72,6 +69,8 @@ export function TableView({
   const minBet = state?.config.minBet ?? DEFAULT_CONFIG.minBet;
   const dealer = state?.dealer;
   const dealerCards = dealer?.cards ?? [];
+  const seatCount = Math.max(1, room.seatCount ?? seats.length ?? DEFAULT_CONFIG.seatCount);
+  const occupied = room.seats.length;
 
   function act(action: PlayerAction) {
     setLockedTurn(turnKey);
@@ -89,7 +88,9 @@ export function TableView({
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
-          {state ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxRounds} 局` : "等待开局"}
+          {state
+            ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxRounds} 局`
+            : `等待开局 · ${occupied}/${seatCount} 人`}
         </div>
         <div className="top-right">
           <em className="status-text">{play.status}</em>
@@ -118,7 +119,7 @@ export function TableView({
       </header>
 
       <div className="felt-wrap">
-        <div className={`felt ${play.stage === "wager" ? "posting" : ""}`}>
+        <div className={`felt seats-${seatCount} ${play.stage === "wager" ? "posting" : ""}`}>
           <div className="board">
             {dealerCards.length > 0 || dealer?.hidden ? (
               <div className="board-cards" key={drawKey}>
@@ -162,12 +163,12 @@ export function TableView({
             </div>
             <HintBar hint={state?.hint ?? null} />
           </div>
-          {Array.from({ length: 4 }, (_, index) => {
+          {Array.from({ length: seatCount }, (_, index) => {
             const player = seats[index];
-            const place = placeFor(youIndex, index, 4);
+            const place = placeFor(youIndex, index, seatCount);
             if (!player) {
               return (
-                <div key={place} className={`seat seat-${place} empty`}>
+                <div key={`empty-${index}`} className={`seat seat-${place} empty`}>
                   <div className="capsule">空位</div>
                 </div>
               );
@@ -210,13 +211,19 @@ export function TableView({
             onSurrender={() => act({ type: "surrender" })}
           />
         ) : !room.started && room.hostId === room.you ? (
-          <div className="action-bar">
+          <div className="action-bar wait-bar">
+            <SeatCountStepper
+              value={seatCount}
+              min={Math.max(MIN_SEATS, occupied)}
+              max={MAX_SEATS}
+              onChange={onSetSeats}
+            />
             <p className="muted">
-              分享房间码 {room.code}，或用 LLM Bot 补齐空位
+              分享房间码 {room.code}，或用 Bot 补齐到 {seatCount} 人
               {room.mode === "pvp" ? "。点自己座位上的「改名」换昵称。" : ""}
             </p>
             <button className="btn primary" onClick={onFillBots}>
-              用 Bot 开局
+              {occupied >= seatCount ? "开局" : "用 Bot 开局"}
             </button>
           </div>
         ) : (
