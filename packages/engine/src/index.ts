@@ -1,4 +1,13 @@
-export { makeDeck, cardLabel, rankLabel, isRed, cardKey } from "./cards.js";
+export { makeDeck, cardLabel, rankLabel, isRed, cardKey, shoeCut, CARDS_PER_DECK } from "./cards.js";
+export {
+  betChipAmounts,
+  clampBet,
+  doubleLastBetAmount,
+  formatBetDraft,
+  isLegalBetAmount,
+  parseBetInput,
+  repeatBetAmount,
+} from "./bets.js";
 export { formatTokens, initialsFromName } from "./format.js";
 export {
   LLM_PERSONAS,
@@ -50,6 +59,10 @@ export {
 export {
   DEFAULT_CONFIG,
   DEALER_NAME,
+  MIN_SEATS,
+  MAX_SEATS,
+  clampSeatCount,
+  decksForSeats,
   RANK_LABELS,
   type Card,
   type Rank,

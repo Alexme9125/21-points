@@ -4,10 +4,13 @@ import {
   botThinkMs,
   chooseBotAction,
   continueFromSettlement,
+  clampSeatCount,
   createTable,
   currentPlayer,
   DEFAULT_CONFIG,
   LLM_PERSONAS,
+  MAX_SEATS,
+  MIN_SEATS,
   pickN,
   revealHoldMs,
   startHand,
@@ -34,6 +37,7 @@ export interface RoomSnapshot {
   started: boolean;
   you: string;
   seats: Seat[];
+  seatCount: number;
   state: PublicState | null;
   deadline: number | null;
   status: string;
@@ -44,6 +48,7 @@ interface Room {
   mode: "pve" | "pvp";
   hostId: string;
   seats: Seat[];
+  seatCount: number;
   table: TableState | null;
   sockets: Map<string, Set<WebSocket>>;
   deadline: number | null;
@@ -63,7 +68,7 @@ const TURN_MS = 30_000;
 function statusText(room: Room): string {
   if (!room.table) {
     const humans = room.seats.filter((s) => s.kind === "human").length;
-    return `等待开局（${humans}/4）`;
+    return `等待开局（${humans}/${room.seatCount}）`;
   }
   const { table } = room;
   if (table.phase === "betting") {
@@ -98,6 +103,7 @@ function snapshot(room: Room, you: string): RoomSnapshot {
     started: Boolean(room.table),
     you,
     seats: room.seats,
+    seatCount: room.seatCount,
     state: room.table ? toPublicState(room.table) : null,
     deadline: room.deadline,
     status: statusText(room),
@@ -133,7 +139,7 @@ function takePersonas(room: Room, n: number): typeof LLM_PERSONAS[number][] {
 }
 
 function fillBots(room: Room): void {
-  const missing = 4 - room.seats.length;
+  const missing = room.seatCount - room.seats.length;
   if (missing <= 0) return;
   const personas = takePersonas(room, missing);
   for (const persona of personas) {
@@ -157,7 +163,7 @@ function startTable(room: Room): void {
         kind: s.kind,
         personaId: s.personaId,
       })),
-      { ...DEFAULT_CONFIG },
+      { ...DEFAULT_CONFIG, seatCount: room.seats.length },
       room.rng,
     ),
   );
@@ -249,7 +255,11 @@ function autoAct(room: Room, playerId: string): void {
   }
 }
 
-export function createRoom(session: Session, mode: "pve" | "pvp"): RoomSnapshot {
+export function createRoom(
+  session: Session,
+  mode: "pve" | "pvp",
+  seatCount = DEFAULT_CONFIG.seatCount,
+): RoomSnapshot {
   if (session.roomCode && rooms.get(session.roomCode)) {
     leaveRoom(session);
   }
@@ -267,6 +277,7 @@ export function createRoom(session: Session, mode: "pve" | "pvp"): RoomSnapshot 
         connected: false,
       },
     ],
+    seatCount: clampSeatCount(seatCount),
     table: null,
     sockets: new Map(),
     deadline: null,
@@ -276,7 +287,7 @@ export function createRoom(session: Session, mode: "pve" | "pvp"): RoomSnapshot 
   };
   rooms.set(code, room);
   session.roomCode = code;
-  if (mode === "pve") startTable(room);
+  if (mode === "pve" || room.seats.length >= room.seatCount) startTable(room);
   return snapshot(room, session.playerId);
 }
 
@@ -289,10 +300,7 @@ export function joinRoom(session: Session, code: string): RoomSnapshot {
     return snapshot(room, session.playerId);
   }
   if (room.table) throw new Error("对局已经开始");
-  if (room.seats.filter((s) => s.kind === "human").length >= 4) {
-    throw new Error("房间已满");
-  }
-  if (room.seats.length >= 4) throw new Error("房间已满");
+  if (room.seats.length >= room.seatCount) throw new Error("房间已满");
   room.seats.push({
     id: session.playerId,
     name: session.name,
@@ -301,7 +309,7 @@ export function joinRoom(session: Session, code: string): RoomSnapshot {
   });
   session.roomCode = room.code;
   broadcast(room);
-  if (room.seats.length === 4) startTable(room);
+  if (room.seats.length >= room.seatCount) startTable(room);
   return snapshot(room, session.playerId);
 }
 
@@ -337,6 +345,7 @@ export function attachSocket(session: Session, ws: WebSocket): void {
         type: string;
         action?: PlayerAction;
         name?: string;
+        seatCount?: number;
       };
       if (msg.type === "action" && msg.action) {
         play(room, session.playerId, msg.action);
@@ -346,6 +355,8 @@ export function attachSocket(session: Session, ws: WebSocket): void {
         hostStart(room, session.playerId);
       } else if (msg.type === "fill_bots") {
         hostFill(room, session.playerId);
+      } else if (msg.type === "set_seats") {
+        applySeatCount(room, session.playerId, msg.seatCount);
       } else if (msg.type === "rename") {
         renamePlayer(room, session, msg.name ?? "");
       }
@@ -395,6 +406,30 @@ function continueHand(room: Room, playerId: string): void {
   room.table = continueFromSettlement(room.table);
   broadcast(room);
   schedule(room);
+}
+
+function applySeatCount(room: Room, playerId: string, raw: unknown): void {
+  if (room.hostId !== playerId) throw new Error("只有房主可以改人数");
+  if (room.table) throw new Error("对局已经开始");
+  const next = clampSeatCount(raw);
+  const occupied = room.seats.length;
+  if (next < occupied) {
+    throw new Error(`桌上已有 ${occupied} 人`);
+  }
+  if (next < MIN_SEATS || next > MAX_SEATS) {
+    throw new Error(`闲家人数须为 ${MIN_SEATS}–${MAX_SEATS} 人`);
+  }
+  room.seatCount = next;
+  broadcast(room);
+  if (room.seats.length >= room.seatCount) startTable(room);
+}
+
+export function setRoomSeatCount(session: Session, seatCount: number): RoomSnapshot {
+  if (!session.roomCode) throw new Error("还没有加入房间");
+  const room = rooms.get(session.roomCode);
+  if (!room) throw new Error("房间不存在");
+  applySeatCount(room, session.playerId, seatCount);
+  return snapshot(room, session.playerId);
 }
 
 function hostStart(room: Room, playerId: string): void {

@@ -1,3 +1,4 @@
+import { betChipAmounts } from "./bets.js";
 import { styleForPersona, type PlayStyle } from "./personas.js";
 import { canHit, handValue, isBlackjack, legalActions, pipValue } from "./rules.js";
 import { computeBetRange, currentPlayer } from "./table.js";
@@ -96,15 +97,14 @@ function deviate(style: PlayStyle, action: ActionType, total: number, soft: bool
 function pickBet(state: TableState, style: PlayStyle): PlayerAction {
   const range = computeBetRange(state);
   if (!range) return { type: "bet", amount: state.config.minBet };
-  const low = 0.0;
-  const high = 0.28 + style.sizeBias * 0.72;
-  let fraction = low + (high - low) * (0.35 + style.sizeBias * 0.5);
-  if (Math.random() < style.shove * 0.18) fraction = 1;
-  else fraction *= 1 + (Math.random() * 2 - 1) * 0.14;
-  fraction = Math.max(0, Math.min(1, fraction));
-  const raw = Math.round((range.min + (range.max - range.min) * fraction) / 1000) * 1000;
-  const amount = Math.min(range.max, Math.max(range.min, raw || range.min));
-  return { type: "bet", amount };
+  const chips = betChipAmounts(range.min, range.max, state.config.minBet);
+  if (chips.length === 0) return { type: "bet", amount: range.min };
+  const t = Math.max(0, Math.min(1, 0.12 + style.sizeBias * 0.88));
+  let idx = Math.round(t * (chips.length - 1));
+  if (Math.random() < style.shove * 0.18) idx = chips.length - 1;
+  else idx += Math.round((Math.random() * 2 - 1) * 0.7);
+  idx = Math.max(0, Math.min(chips.length - 1, idx));
+  return { type: "bet", amount: chips[idx]! };
 }
 
 export function chooseBotAction(state: TableState): PlayerAction {

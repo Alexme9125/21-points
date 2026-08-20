@@ -1,4 +1,5 @@
-import { cardLabel, makeDeck } from "./cards.js";
+import { isLegalBetAmount } from "./bets.js";
+import { cardLabel, makeDeck, shoeCut } from "./cards.js";
 import { formatTokens } from "./format.js";
 import { nextRng, shuffleInPlace } from "./rng.js";
 import {
@@ -29,7 +30,7 @@ import type {
   TableConfig,
   TableState,
 } from "./types.js";
-import { DEALER_NAME, DEFAULT_CONFIG } from "./types.js";
+import { clampSeatCount, DEALER_NAME, decksForSeats, DEFAULT_CONFIG, MAX_SEATS, MIN_SEATS } from "./types.js";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -54,9 +55,9 @@ function pushLog(
 }
 
 function shuffleDeck(state: TableState): void {
-  state.deck = makeDeck();
+  state.deck = makeDeck(state.config.deckCount);
   state.rng = shuffleInPlace(state.deck, state.rng);
-  pushLog(state, "shuffle", "重新洗牌");
+  pushLog(state, "shuffle", `重新洗牌（${state.config.deckCount} 副）`);
 }
 
 function draw(state: TableState): Card {
@@ -315,7 +316,7 @@ function afterHandResolved(state: TableState): void {
 }
 
 function dealRound(state: TableState): void {
-  if (state.deck.length < 20) shuffleDeck(state);
+  if (state.deck.length < shoeCut(state.config.deckCount)) shuffleDeck(state);
   const order: number[] = [];
   let idx = state.firstActorIndex;
   for (let i = 0; i < state.players.length; i++) {
@@ -381,7 +382,17 @@ export function createTable(
   config?: TableConfig,
   seed = Date.now() % 0x7fffffff,
 ): TableState {
-  const resolved: TableConfig = { ...DEFAULT_CONFIG, ...config };
+  const requested = config?.seatCount ?? players.length;
+  const seatCount = clampSeatCount(requested);
+  const resolved: TableConfig = {
+    ...DEFAULT_CONFIG,
+    ...config,
+    seatCount,
+    deckCount: decksForSeats(seatCount),
+  };
+  if (players.length < MIN_SEATS || players.length > MAX_SEATS) {
+    throw new Error(`闲家人数须为 ${MIN_SEATS}–${MAX_SEATS} 人`);
+  }
   if (players.length !== resolved.seatCount) {
     throw new Error(`需要 ${resolved.seatCount} 名玩家`);
   }
@@ -407,6 +418,7 @@ export function createTable(
     logs: [],
     logSeq: 0,
     lastCards: {},
+    lastBets: {},
     tokensAtHandStart: {},
     settlement: null,
   };
@@ -462,9 +474,10 @@ function applyBet(state: TableState, amount: number): void {
   if (!player) throw new Error("没有当前玩家");
   const range = betRangeFor(player.tokens, state.config);
   if (!range) throw new Error("筹码不足，无法下注");
-  if (amount < range.min || amount > range.max) throw new Error("下注数量不合法");
+  if (!isLegalBetAmount(amount, range, state.config.minBet)) throw new Error("下注数量不合法");
   player.tokens -= amount;
   state.pot += amount;
+  state.lastBets[player.id] = amount;
   const seat = seatOf(state, player.id);
   seat.hands = [{ cards: [], bet: amount, status: "open", fromSplit: false }];
   pushLog(state, "bet", `${player.name} 下注 ${formatTokens(amount)} Tokens`, {
@@ -687,6 +700,7 @@ export function toPublicState(state: TableState): PublicState {
     outcome: state.outcome,
     hint: cur ? hintFor(cur.hand.cards, state.dealer[0], cur.hand.fromSplit) : null,
     betRange: computeBetRange(state),
+    lastBet: current ? (state.lastBets[current.id] ?? null) : null,
     legalActions: legalActions(state),
     logs: state.logs.slice(-24),
     settlement: state.settlement,
@@ -745,6 +759,7 @@ export function forcePlaying(
   finishHandStatus(hand);
   next.lastCards = { [player.id]: { hands: [hand] } };
   next.pot = paid;
+  next.lastBets = { ...next.lastBets, [player.id]: paid };
   next.deck = [...upcoming].reverse();
   if (hand.status !== "open") playDealerThenSettle(next);
   return next;

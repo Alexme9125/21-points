@@ -21,6 +21,8 @@ export type Suit = "spades" | "hearts" | "diamonds" | "clubs";
 export interface Card {
   rank: Rank;
   suit: Suit;
+  /** Which copy in a multi-deck shoe (0-based). Omitted in tests that build single cards. */
+  shoe?: number;
 }
 
 export type PlayerKind = "human" | "bot";
@@ -40,16 +42,37 @@ export interface TableConfig {
   minBet: number;
   maxBet: number;
   seatCount: number;
+  /** 52-card decks in the shoe. Always derived from `seatCount` at table create. */
+  deckCount: number;
   roundsUntilSettle: number;
 }
 
 export const DEFAULT_CONFIG: TableConfig = {
-  startingTokens: 500_000,
-  minBet: 5_000,
-  maxBet: 100_000,
+  startingTokens: 100_000,
+  minBet: 1_000,
+  maxBet: 10_000,
   seatCount: 4,
+  deckCount: 4,
   roundsUntilSettle: 24,
 };
+
+export const MIN_SEATS = 1;
+export const MAX_SEATS = 6;
+
+export function clampSeatCount(n: unknown): number {
+  const v = typeof n === "number" ? n : Number(n);
+  if (!Number.isFinite(v)) return DEFAULT_CONFIG.seatCount;
+  return Math.min(MAX_SEATS, Math.max(MIN_SEATS, Math.round(v)));
+}
+
+/** 1 人 1 副，2–3 人 2 副，4–5 人 4 副，6 人 6 副。 */
+export function decksForSeats(seatCount: number): number {
+  const n = clampSeatCount(seatCount);
+  if (n <= 1) return 1;
+  if (n <= 3) return 2;
+  if (n <= 5) return 4;
+  return 6;
+}
 
 export const DEALER_NAME = "庄家";
 
@@ -142,6 +165,7 @@ export interface TableState {
   logs: LogEntry[];
   logSeq: number;
   lastCards: Record<string, SeatCards>;
+  lastBets: Record<string, number>;
   tokensAtHandStart: Record<string, number>;
   settlement: Settlement | null;
 }
@@ -187,6 +211,8 @@ export interface PublicState {
   outcome: RevealOutcome | null;
   hint: HandHint | null;
   betRange: BetRange | null;
+  /** Current actor's previous wager this session, for 续注. */
+  lastBet: number | null;
   legalActions: ActionType[];
   logs: LogEntry[];
   settlement: Settlement | null;
