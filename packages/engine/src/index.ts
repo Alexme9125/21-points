@@ -9,7 +9,22 @@ export {
   type PlayStyle,
 } from "./personas.js";
 export { nextRng, shuffleInPlace, pickN } from "./rng.js";
-export { holeKind, holeHint, hintSummary, isAceKing, orderedRanks } from "./rules.js";
+export {
+  pipValue,
+  handValue,
+  isBlackjack,
+  isBust,
+  dealerShouldHit,
+  handLabel,
+  hintFor,
+  hintSummary,
+  legalActions,
+  payoutFor,
+  canSplit,
+  canDouble,
+  canSurrender,
+  canHit,
+} from "./rules.js";
 export {
   createTable,
   startHand,
@@ -18,23 +33,23 @@ export {
   continueFromSettlement,
   toPublicState,
   computeBetRange,
-  betRangeFor,
   currentPlayer,
-  forceAwaiting,
+  forceBetting,
+  forcePlaying,
 } from "./table.js";
-export { chooseBotAction, botThinkMs, evaluateSpot } from "./bot.js";
+export { chooseBotAction, botThinkMs, evaluateSpot, basicPlay } from "./bot.js";
 export {
   FX_MS,
   openingRevealStage,
   revealHoldMs,
   chipsForStage,
-  shouldShowThird,
+  shouldShowDealerHole,
   RESULT_LOG_KINDS,
   type RevealFxStage,
 } from "./fx.js";
 export {
   DEFAULT_CONFIG,
-  POOL_NAME,
+  DEALER_NAME,
   RANK_LABELS,
   type Card,
   type Rank,
@@ -44,10 +59,13 @@ export {
   type TableState,
   type PublicState,
   type PublicPlayer,
+  type PublicDealer,
   type PlayerAction,
+  type ActionType,
   type Phase,
-  type HoleKind,
-  type HoleHint,
+  type HandHint,
+  type HandState,
+  type SeatCards,
   type BetRange,
   type RevealOutcome,
   type OutcomeKind,

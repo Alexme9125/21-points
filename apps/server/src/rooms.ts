@@ -66,19 +66,24 @@ function statusText(room: Room): string {
     return `等待开局（${humans}/4）`;
   }
   const { table } = room;
+  if (table.phase === "betting") {
+    const p = currentPlayer(table);
+    if (!p) return "等待下注";
+    return p.kind === "bot" ? `${p.name} 思考中` : `轮到 ${p.name} 下注`;
+  }
   if (table.phase === "awaiting") {
     const p = currentPlayer(table);
     if (!p) return "等待行动";
-    return p.kind === "bot" ? `${p.name} 思考中` : `轮到 ${p.name} 添菜`;
+    return p.kind === "bot" ? `${p.name} 思考中` : `轮到 ${p.name}`;
   }
   if (table.phase === "reveal") {
     const kind = table.outcome?.kind;
-    if (kind === "consecutive") return "连张，自动放弃";
-    if (kind === "horn") return table.outcome?.multiplier === 4 ? "超级牛角尖！" : "牛角尖！";
-    if (kind === "triple_win") return "三张通吃！";
-    if (kind === "win") return "爽吃许愿池";
-    if (kind === "lose" || kind === "triple_lose") return "挨饿";
-    return "结算中";
+    if (kind === "blackjack") return "黑杰克！";
+    if (kind === "bust") return "爆牌";
+    if (kind === "win") return "闲家赢";
+    if (kind === "lose") return "庄家赢";
+    if (kind === "push") return "平局";
+    return "庄家开牌";
   }
   if (table.phase === "settlement") return "本盘结束";
   if (table.phase === "gameover") return "对局结束";
@@ -175,7 +180,7 @@ function schedule(room: Room): void {
   const table = room.table;
   if (!table) return;
 
-  if (table.phase === "awaiting") {
+  if (table.phase === "awaiting" || table.phase === "betting") {
     const player = currentPlayer(table);
     if (!player) return;
     if (player.kind === "bot") {
@@ -196,19 +201,19 @@ function schedule(room: Room): void {
     }
     const seat = room.seats.find((s) => s.id === player.id);
     if (seat && !seat.connected) {
-      room.timers.action = setTimeout(() => autoFold(room, player.id), 8_000);
+      room.timers.action = setTimeout(() => autoAct(room, player.id), 8_000);
       room.deadline = Date.now() + 8_000;
       broadcast(room);
       return;
     }
     room.deadline = Date.now() + TURN_MS;
-    room.timers.action = setTimeout(() => autoFold(room, player.id), TURN_MS);
+    room.timers.action = setTimeout(() => autoAct(room, player.id), TURN_MS);
     broadcast(room);
     return;
   }
 
   if (table.phase === "reveal") {
-    const delay = revealHoldMs(table.outcome?.kind ?? "fold");
+    const delay = revealHoldMs(table.outcome?.kind);
     room.timers.advance = setTimeout(() => {
       room.table = advance(room.table!);
       broadcast(room);
@@ -226,12 +231,17 @@ function schedule(room: Room): void {
   }
 }
 
-function autoFold(room: Room, playerId: string): void {
-  if (!room.table || room.table.phase !== "awaiting") return;
+function autoAct(room: Room, playerId: string): void {
+  if (!room.table) return;
+  if (room.table.phase !== "awaiting" && room.table.phase !== "betting") return;
   const current = currentPlayer(room.table);
   if (!current || current.id !== playerId) return;
   try {
-    room.table = applyAction(room.table, playerId, { type: "fold" });
+    const action =
+      room.table.phase === "betting"
+        ? { type: "bet" as const, amount: room.table.config.minBet }
+        : { type: "stand" as const };
+    room.table = applyAction(room.table, playerId, action);
     broadcast(room);
     schedule(room);
   } catch (err) {

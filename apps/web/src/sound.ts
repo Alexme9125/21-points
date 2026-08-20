@@ -84,22 +84,26 @@ export function playOutcome(kind: OutcomeKind): void {
       beep(784, t + 0.16, 0.18, "triangle", 0.08);
       return;
     }
-    if (kind === "triple_win") {
+    if (kind === "blackjack") {
       beep(523, t, 0.1, "sine", 0.09);
       beep(659, t + 0.07, 0.1, "sine", 0.1);
       beep(784, t + 0.14, 0.1, "triangle", 0.1);
       beep(1046, t + 0.22, 0.22, "sine", 0.08);
       return;
     }
-    if (kind === "lose" || kind === "triple_lose") {
+    if (kind === "lose" || kind === "bust") {
       beep(196, t, 0.16, "triangle", 0.08, 140);
       beep(147, t + 0.12, 0.22, "sine", 0.07, 110);
       return;
     }
-    if (kind === "horn") {
+    if (kind === "surrender") {
       beep(311, t, 0.12, "square", 0.05);
       beep(233, t + 0.08, 0.2, "square", 0.045, 170);
       return;
+    }
+    if (kind === "push") {
+      beep(392, t, 0.1, "sine", 0.05);
+      beep(330, t + 0.09, 0.12, "triangle", 0.04);
     }
   })();
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_THINK_LINES, formatTokens, personaById, type PublicPlayer } from "@hotpot/engine";
+import { DEFAULT_THINK_LINES, formatTokens, handLabel, personaById, type PublicPlayer } from "@hotpot/engine";
 import { useEffect, useRef, useState } from "react";
 import { Avatar } from "./Avatar";
 import { CardView } from "./CardView";
@@ -23,12 +23,16 @@ export function SeatCapsule({
   onRename?: (name: string) => void;
 }) {
   const cards = player.cards;
-  const holeKey = cards ? `${cards.hole[0].suit}${cards.hole[0].rank}${cards.hole[1].suit}${cards.hole[1].rank}` : "";
+  const holeKey = (cards?.hands ?? [])
+    .flatMap((h) => h.cards)
+    .map((c) => `${c.suit}${c.rank}`)
+    .join("-");
   const lines = personaById(player.personaId ?? "")?.style.thinkLines ?? DEFAULT_THINK_LINES;
   const [tick, setTick] = useState(0);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(player.name);
   const inputRef = useRef<HTMLInputElement>(null);
+  const wager = (cards?.hands ?? []).reduce((sum, h) => sum + (h.bet || 0), 0);
 
   useEffect(() => {
     if (!thinking) {
@@ -61,12 +65,25 @@ export function SeatCapsule({
       className={`seat seat-${place} ${active ? "active" : ""} ${you ? "you" : ""} ${thinking ? "thinking" : ""}`}
       data-player-id={player.id}
     >
-      {showCards && cards ? (
-        <div className="seat-cards" key={holeKey}>
-          <CardView card={cards.hole[0]} tilt={-8} compact draw delayMs={0} />
-          <CardView card={cards.hole[1]} tilt={8} compact draw delayMs={90} />
-        </div>
-      ) : null}
+      {showCards && cards
+        ? cards.hands.map((hand, i) => (
+            <div className="seat-cards" key={`${holeKey}-${i}`}>
+              {hand.cards.map((card, idx) => (
+                <CardView
+                  key={`${card.suit}-${card.rank}-${idx}`}
+                  card={card}
+                  tilt={idx === 0 ? -8 : 8}
+                  compact
+                  draw
+                  delayMs={idx * 70}
+                />
+              ))}
+              {hand.cards.length > 0 ? (
+                <span className="hand-total">{handLabel(hand.cards, hand.fromSplit)}</span>
+              ) : null}
+            </div>
+          ))
+        : null}
       {thinking ? (
         <div className="think-bubble" aria-live="polite">
           <span className="think-line">{line}</span>
@@ -118,7 +135,10 @@ export function SeatCapsule({
             ) : null}
             {!player.inHand ? <span className="tag">旁观</span> : null}
           </div>
-          <div className="capsule-tokens">{formatTokens(player.tokens)} Tokens</div>
+          <div className="capsule-tokens">
+            {formatTokens(player.tokens)} Tokens
+            {wager > 0 ? <span className="seat-bet"> · 注 {formatTokens(wager)}</span> : null}
+          </div>
         </div>
       </div>
     </div>

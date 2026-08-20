@@ -15,7 +15,7 @@ import {
 } from "./api";
 import { armSoundUnlock } from "./sound";
 
-const RULES_KEY = "hotpot.rulesSeen";
+const RULES_KEY = "blackjack.rulesSeen";
 
 function unreadRules(): boolean {
   try {
@@ -144,8 +144,7 @@ export function App() {
         room={room}
         now={now}
         error={error}
-        onFold={() => send({ type: "action", action: { type: "fold" } })}
-        onAdd={(amount) => send({ type: "action", action: { type: "add", amount } })}
+        onAction={(action) => send({ type: "action", action })}
         onContinue={() => send({ type: "continue" })}
         onLeave={exit}
         onFillBots={() => send({ type: "fill_bots" })}

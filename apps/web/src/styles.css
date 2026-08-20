@@ -127,7 +127,7 @@ em { font-style: normal; color: var(--accent); }
   gap: 10px;
   text-align: center;
 }
-.board-cards { display: flex; gap: 10px; align-items: center; }
+.board-cards { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: center; }
 .waiting-copy { color: var(--muted); }
 .pool {
   display: flex;
@@ -210,9 +210,18 @@ em { font-style: normal; color: var(--accent); }
 .who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .capsule-tokens { color: var(--muted); font-size: 12px; }
 .tag { font-size: 10px; color: var(--muted); font-weight: 600; }
-.seat-cards { display: flex; }
+.seat-cards { display: flex; align-items: flex-end; }
 .seat-cards .playing-card { margin-left: -18px; }
 .seat-cards .playing-card:first-child { margin-left: 0; }
+.hand-total {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+.seat-bet { color: var(--accent); }
+.play-actions { gap: 10px; }
 .think-bubble {
   display: flex;
   align-items: center;
@@ -304,6 +313,8 @@ em { font-style: normal; color: var(--accent); }
 .compact .center-suit .suit { width: 16px; height: 16px; }
 .playing-card.back {
   background: linear-gradient(160deg, #3b82f6, #1d4ed8);
+  justify-content: center;
+  align-items: center;
 }
 .back-mark {
   margin: auto;
@@ -462,7 +473,7 @@ em { font-style: normal; color: var(--accent); }
   .seat-bottom { grid-area: bottom; max-width: 168px; }
   .seat-left { grid-area: left; max-width: 100%; }
   .seat-right { grid-area: right; max-width: 100%; }
-  .seat.active .seat-cards { display: none; }
+  .seat-cards { display: flex; }
   .seat-cards .playing-card { margin-left: -12px; }
   .capsule { min-width: 0; width: 100%; padding: 4px 8px 4px 4px; }
   .capsule-name { max-width: 100%; font-size: 12px; }

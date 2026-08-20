@@ -16,11 +16,9 @@ export function SettlementModal({
   const settlement = state.settlement;
   if (!settlement || (state.phase !== "settlement" && state.phase !== "gameover")) return null;
   const title =
-    settlement.reason === "empty"
-      ? "许愿池已被清空"
-      : settlement.reason === "split"
-        ? `满 ${state.config.dealsUntilSplit} 次发牌，摊池`
-        : "对局结束";
+    settlement.reason === "rounds"
+      ? `满 ${state.config.roundsUntilSettle} 局，本盘结算`
+      : "对局结束";
   return (
     <div className="overlay">
       <div className="modal">
@@ -42,10 +40,6 @@ export function SettlementModal({
             );
           })}
         </ul>
-        <p className="muted">
-          许愿池剩余 {formatTokens(settlement.leftoverPool)} Tokens
-          {settlement.splitEach ? ` · 每人分得 ${formatTokens(settlement.splitEach)}` : ""}
-        </p>
         {mode === "pvp" ? (
           <p className="muted">返回大厅后本局立即结束，你的座位空出，房间回到等待开局。</p>
         ) : null}
