@@ -581,7 +581,12 @@ em { font-style: normal; color: var(--accent); }
     display: flex;
     flex-direction: column;
   }
-  .chip-btn { min-height: 40px; flex: 1 1 28%; padding: 8px 10px; }
+  .chip-bets {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .chip-btn { min-height: 40px; min-width: 0; width: 100%; padding: 8px 6px; font-size: 13px; }
   .custom-bet {
     display: flex;
     flex-direction: row;
