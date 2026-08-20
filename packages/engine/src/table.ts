@@ -1,4 +1,4 @@
-import { cardLabel, makeDeck } from "./cards.js";
+import { cardLabel, makeDeck, shoeCut } from "./cards.js";
 import { formatTokens } from "./format.js";
 import { nextRng, shuffleInPlace } from "./rng.js";
 import {
@@ -29,7 +29,7 @@ import type {
   TableConfig,
   TableState,
 } from "./types.js";
-import { clampSeatCount, DEALER_NAME, DEFAULT_CONFIG, MAX_SEATS, MIN_SEATS } from "./types.js";
+import { clampSeatCount, DEALER_NAME, decksForSeats, DEFAULT_CONFIG, MAX_SEATS, MIN_SEATS } from "./types.js";
 
 function clone<T>(value: T): T {
   return structuredClone(value);
@@ -54,9 +54,9 @@ function pushLog(
 }
 
 function shuffleDeck(state: TableState): void {
-  state.deck = makeDeck();
+  state.deck = makeDeck(state.config.deckCount);
   state.rng = shuffleInPlace(state.deck, state.rng);
-  pushLog(state, "shuffle", "重新洗牌");
+  pushLog(state, "shuffle", `重新洗牌（${state.config.deckCount} 副）`);
 }
 
 function draw(state: TableState): Card {
@@ -315,7 +315,7 @@ function afterHandResolved(state: TableState): void {
 }
 
 function dealRound(state: TableState): void {
-  if (state.deck.length < 20) shuffleDeck(state);
+  if (state.deck.length < shoeCut(state.config.deckCount)) shuffleDeck(state);
   const order: number[] = [];
   let idx = state.firstActorIndex;
   for (let i = 0; i < state.players.length; i++) {
@@ -382,10 +382,12 @@ export function createTable(
   seed = Date.now() % 0x7fffffff,
 ): TableState {
   const requested = config?.seatCount ?? players.length;
+  const seatCount = clampSeatCount(requested);
   const resolved: TableConfig = {
     ...DEFAULT_CONFIG,
     ...config,
-    seatCount: clampSeatCount(requested),
+    seatCount,
+    deckCount: decksForSeats(seatCount),
   };
   if (players.length < MIN_SEATS || players.length > MAX_SEATS) {
     throw new Error(`闲家人数须为 ${MIN_SEATS}–${MAX_SEATS} 人`);

@@ -7,6 +7,9 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
         <p className="muted">1 到 6 名闲家对一名庄家。大厅或开局前可改人数。目标是点数尽量接近 21，但不能超过。</p>
         <ul className="rules">
           <li>
+            牌靴按闲家人数自动选择：1 人 1 副，2–3 人 2 副，4–5 人 4 副，6 人 6 副。剩余不足约四分之一时重新洗牌。
+          </li>
+          <li>
             2–10 按点数，J/Q/K 算 10，A 可算 1 或 11。例如 A+8 是软 19，A+7+J 是 18。
           </li>
           <li>每人先下注，再发两张牌。庄家一张明牌、一张暗牌。</li>

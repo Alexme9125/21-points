@@ -110,6 +110,7 @@ test("PVP table size can be changed before start and two seats auto-start", () =
     assert.equal(joined.started, true);
     assert.ok(joined.state);
     assert.equal(joined.state?.config.seatCount, 2);
+    assert.equal(joined.state?.config.deckCount, 2);
   } finally {
     leaveAll([host, guest]);
   }
@@ -129,10 +130,12 @@ test("host cannot shrink below seated players, PVE honors a solo table", () => {
     assert.equal(pve.started, true);
     assert.equal(pve.seats.length, 1);
     assert.equal(pve.state?.players.length, 1);
+    assert.equal(pve.state?.config.deckCount, 1);
 
     const trio = createRoom(trioHost, "pve", 3);
     assert.equal(trio.seats.length, 3);
     assert.equal(trio.seats.filter((s) => s.kind === "bot").length, 2);
+    assert.equal(trio.state?.config.deckCount, 2);
   } finally {
     leaveAll([host, guest, solo, trioHost]);
   }

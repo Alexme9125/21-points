@@ -1,4 +1,4 @@
-import { MAX_SEATS, MIN_SEATS } from "@hotpot/engine";
+import { decksForSeats, MAX_SEATS, MIN_SEATS } from "@hotpot/engine";
 
 export function SeatCountStepper({
   value,
@@ -15,9 +15,13 @@ export function SeatCountStepper({
   onChange: (n: number) => void;
   label?: string;
 }) {
+  const decks = decksForSeats(value);
   return (
     <div className="stepper">
-      <span className="stepper-label">{label}</span>
+      <div className="stepper-copy">
+        <span className="stepper-label">{label}</span>
+        <span className="stepper-hint">将使用 {decks} 副牌</span>
+      </div>
       <div className="stepper-controls">
         <button
           type="button"

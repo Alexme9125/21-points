@@ -68,7 +68,9 @@ input:focus { outline: 2px solid var(--accent-soft); border-color: var(--accent)
   justify-content: space-between;
   gap: 12px;
 }
+.stepper-copy { display: grid; gap: 2px; }
 .stepper-label { font-size: 13px; color: var(--muted); }
+.stepper-hint { font-size: 12px; color: var(--muted); }
 .stepper-controls { display: flex; align-items: center; gap: 8px; }
 .stepper-controls b { min-width: 1.6em; text-align: center; font-size: 18px; }
 .stepper-btn { width: 40px; padding: 8px 0; }
