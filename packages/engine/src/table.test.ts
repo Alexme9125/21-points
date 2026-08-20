@@ -210,10 +210,10 @@ describe("table flow", () => {
     expect(state.phase).toBe("betting");
   });
 
-  it("uses a 1K–10K table with a 100K stack over 24 rounds", () => {
+  it("uses a 1K–10K table with a 100K stack over 12 rounds", () => {
     expect(DEFAULT_CONFIG.minBet).toBe(1_000);
     expect(DEFAULT_CONFIG.maxBet).toBe(10_000);
-    expect(DEFAULT_CONFIG.roundsUntilSettle).toBe(24);
+    expect(DEFAULT_CONFIG.roundsUntilSettle).toBe(12);
     expect(DEFAULT_CONFIG.startingTokens).toBe(100_000);
     expect(DEFAULT_CONFIG.seatCount).toBe(4);
     expect(DEFAULT_CONFIG.deckCount).toBe(4);

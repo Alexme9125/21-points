@@ -53,7 +53,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   maxBet: 10_000,
   seatCount: 4,
   deckCount: 4,
-  roundsUntilSettle: 24,
+  roundsUntilSettle: 12,
 };
 
 export const MIN_SEATS = 1;
