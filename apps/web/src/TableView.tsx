@@ -57,12 +57,20 @@ export function TableView({
       (state?.phase === "awaiting" || state?.phase === "betting") &&
       currentKind === "human",
   );
-  const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}-${state?.currentHandIndex ?? 0}`;
+  const actingHand = state?.players.find((p) => p.id === state.currentPlayerId)?.cards?.hands[
+    state.currentHandIndex ?? 0
+  ];
+  // Hit stays on the same player/phase; include the live hand and last log so
+  // the anti-double-click lock releases after the extra card arrives.
+  const turnKey = `${state?.dealsThisHand}-${state?.currentPlayerId}-${state?.phase}-${state?.currentHandIndex ?? 0}-${actingHand?.cards.length ?? 0}-${actingHand?.status ?? ""}-${state?.logs.at(-1)?.id ?? 0}`;
   const [lockedTurn, setLockedTurn] = useState("");
   const [sound, setSound] = useState(isSoundOn);
   useEffect(() => {
     if (state?.phase !== "awaiting" && state?.phase !== "betting") setLockedTurn("");
   }, [state?.phase, turnKey]);
+  useEffect(() => {
+    if (error) setLockedTurn("");
+  }, [error]);
 
   const drawKey = `${state?.handNumber ?? 0}-${state?.dealsThisHand ?? 0}-${state?.dealer.cards.length ?? 0}-${play.showDealerHole}`;
   const maxRounds = state?.config.roundsUntilSettle ?? DEFAULT_CONFIG.roundsUntilSettle;
