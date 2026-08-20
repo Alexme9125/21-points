@@ -18,7 +18,7 @@ export function RulesModal({ open, onClose }: { open: boolean; onClose: () => vo
           <li>
             开局 {formatTokens(DEFAULT_CONFIG.startingTokens)} Tokens。每局 {formatTokens(DEFAULT_CONFIG.minBet)}–
             {formatTokens(DEFAULT_CONFIG.maxBet)}
-            ，快捷可点最小、2K、5K、最大；上一局之后可续注或续×2。
+            ，快捷可点最小、2K、5K、最大或续注；也可拖滑条或输入金额再点下注。
           </li>
           <li>
             <b>要牌</b>继续拿牌；<b>停牌</b>不再拿。超过 21 即爆牌，立刻输掉这手。

@@ -41,3 +41,21 @@ export function doubleLastBetAmount(
   const doubled = clampBet(lastBet * 2, range.min, range.max, step);
   return doubled === same ? null : doubled;
 }
+
+/** Accepts `3000`, `3K`, or `3.5k`. */
+export function parseBetInput(raw: string): number | null {
+  const t = raw.trim().replace(/,/g, "").replace(/，/g, "").replace(/\s/g, "").toUpperCase();
+  if (!t) return null;
+  const m = t.match(/^(\d+(?:\.\d+)?)([KM])?$/);
+  if (!m) return null;
+  const n = Number(m[1]);
+  if (!Number.isFinite(n)) return null;
+  const mul = m[2] === "M" ? 1_000_000 : m[2] === "K" ? 1_000 : 1;
+  return Math.round(n * mul);
+}
+
+export function formatBetDraft(amount: number): string {
+  if (amount >= 1_000_000 && amount % 1_000_000 === 0) return `${amount / 1_000_000}M`;
+  if (amount >= 1000 && amount % 1000 === 0) return `${amount / 1000}K`;
+  return String(amount);
+}

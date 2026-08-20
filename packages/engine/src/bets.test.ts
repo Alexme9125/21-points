@@ -3,7 +3,9 @@ import {
   betChipAmounts,
   clampBet,
   doubleLastBetAmount,
+  formatBetDraft,
   isLegalBetAmount,
+  parseBetInput,
   repeatBetAmount,
 } from "./bets.js";
 import { DEFAULT_CONFIG } from "./types.js";
@@ -29,6 +31,18 @@ describe("clampBet and legality", () => {
     expect(isLegalBetAmount(2_000, range)).toBe(true);
     expect(isLegalBetAmount(3_500, range)).toBe(true);
     expect(isLegalBetAmount(1_500, range)).toBe(false);
+  });
+});
+
+describe("parseBetInput", () => {
+  it("reads plain numbers and K/M suffixes", () => {
+    expect(parseBetInput("3000")).toBe(3_000);
+    expect(parseBetInput("3K")).toBe(3_000);
+    expect(parseBetInput(" 3.5k ")).toBe(3_500);
+    expect(parseBetInput("1M")).toBe(1_000_000);
+    expect(parseBetInput("abc")).toBeNull();
+    expect(formatBetDraft(3_000)).toBe("3K");
+    expect(formatBetDraft(3_500)).toBe("3500");
   });
 });
 
