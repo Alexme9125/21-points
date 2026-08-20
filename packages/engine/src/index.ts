@@ -1,4 +1,4 @@
-export { makeDeck, cardLabel, rankLabel, isRed, cardKey } from "./cards.js";
+export { makeDeck, cardLabel, rankLabel, isRed, cardKey, shoeCut, CARDS_PER_DECK } from "./cards.js";
 export { formatTokens, initialsFromName } from "./format.js";
 export {
   LLM_PERSONAS,
@@ -53,6 +53,7 @@ export {
   MIN_SEATS,
   MAX_SEATS,
   clampSeatCount,
+  decksForSeats,
   RANK_LABELS,
   type Card,
   type Rank,

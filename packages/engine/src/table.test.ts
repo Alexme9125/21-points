@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeDeck } from "./cards.js";
 import {
   advance,
   applyAction,
@@ -10,6 +11,7 @@ import {
   MAX_SEATS,
   MIN_SEATS,
   clampSeatCount,
+  decksForSeats,
   startHand,
   toPublicState,
 } from "./index.js";
@@ -204,6 +206,41 @@ describe("table flow", () => {
     expect(DEFAULT_CONFIG.roundsUntilSettle).toBe(24);
     expect(DEFAULT_CONFIG.startingTokens).toBe(500_000);
     expect(DEFAULT_CONFIG.seatCount).toBe(4);
+    expect(DEFAULT_CONFIG.deckCount).toBe(4);
+  });
+
+  it("sizes the shoe from seated player count even if config still has the default deckCount", () => {
+    const solo = startHand(
+      createTable([{ id: "p1", name: "You", kind: "human" }], { ...DEFAULT_CONFIG, seatCount: 1 }, 1),
+    );
+    expect(solo.config.deckCount).toBe(1);
+    expect(solo.deck).toHaveLength(52);
+    expect(solo.logs.some((entry) => entry.kind === "shuffle" && entry.text.includes("1 副"))).toBe(true);
+
+    const four = startHand(createTable(fourPlayers(), DEFAULT_CONFIG, 1));
+    expect(four.config.deckCount).toBe(decksForSeats(4));
+    expect(four.deck).toHaveLength(208);
+
+    const sixPlayers = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i + 1}`,
+      name: `P${i + 1}`,
+      kind: "bot" as const,
+    }));
+    const six = startHand(createTable(sixPlayers, { ...DEFAULT_CONFIG, seatCount: 6, deckCount: 1 }, 2));
+    expect(six.config.deckCount).toBe(6);
+    expect(six.deck).toHaveLength(312);
+  });
+
+  it("reshuffles when the remaining shoe falls below the cut", () => {
+    let state = startHand(createTable(fourPlayers(), DEFAULT_CONFIG, 3));
+    state.deck = makeDeck(1).slice(0, 10);
+    for (let i = 0; i < 4; i++) {
+      const id = state.players[state.currentIndex]!.id;
+      state = applyAction(state, id, { type: "bet", amount: DEFAULT_CONFIG.minBet });
+    }
+    const shuffles = state.logs.filter((entry) => entry.kind === "shuffle");
+    expect(shuffles.at(-1)?.text).toMatch(/4 副/);
+    expect(state.deck.length).toBeGreaterThan(150);
   });
 
   it("allows 1–6 seated players against the dealer", () => {

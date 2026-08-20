@@ -1,4 +1,4 @@
-import { DEALER_NAME, DEFAULT_CONFIG, formatTokens, handLabel, MAX_SEATS, MIN_SEATS, type PlayerAction, type PublicPlayer } from "@hotpot/engine";
+import { cardKey, DEALER_NAME, decksForSeats, DEFAULT_CONFIG, formatTokens, handLabel, MAX_SEATS, MIN_SEATS, type PlayerAction, type PublicPlayer } from "@hotpot/engine";
 import { useEffect, useState } from "react";
 import { ActionBar } from "./ActionBar";
 import { CardView } from "./CardView";
@@ -71,6 +71,7 @@ export function TableView({
   const dealerCards = dealer?.cards ?? [];
   const seatCount = Math.max(1, room.seatCount ?? seats.length ?? DEFAULT_CONFIG.seatCount);
   const occupied = room.seats.length;
+  const deckCount = state?.config.deckCount ?? decksForSeats(seatCount);
 
   function act(action: PlayerAction) {
     setLockedTurn(turnKey);
@@ -83,14 +84,14 @@ export function TableView({
         <div className="top-brand">
           <strong>21点</strong>
           <span className="stakes">
-            最小 {formatTokens(minBet)} · 最大 {formatTokens(state?.config.maxBet ?? DEFAULT_CONFIG.maxBet)}
+            最小 {formatTokens(minBet)} · 最大 {formatTokens(state?.config.maxBet ?? DEFAULT_CONFIG.maxBet)} · {deckCount} 副牌
           </span>
           {error ? <span className="error"> {error}</span> : null}
         </div>
         <div className="top-center">
           {state
-            ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxRounds} 局`
-            : `等待开局 · ${occupied}/${seatCount} 人`}
+            ? `第 ${state.handNumber} 盘 · ${state.dealsThisHand}/${maxRounds} 局 · ${deckCount} 副`
+            : `等待开局 · ${occupied}/${seatCount} 人 · ${deckCount} 副牌`}
         </div>
         <div className="top-right">
           <em className="status-text">{play.status}</em>
@@ -131,7 +132,7 @@ export function TableView({
                 ) : (
                   dealerCards.slice(1).map((card, i) => (
                     <CardView
-                      key={`${card.suit}-${card.rank}-${i}`}
+                      key={cardKey(card)}
                       card={card}
                       tilt={i % 2 === 0 ? 6 : -4}
                       draw

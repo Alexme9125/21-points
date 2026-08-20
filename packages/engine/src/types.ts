@@ -21,6 +21,8 @@ export type Suit = "spades" | "hearts" | "diamonds" | "clubs";
 export interface Card {
   rank: Rank;
   suit: Suit;
+  /** Which copy in a multi-deck shoe (0-based). Omitted in tests that build single cards. */
+  shoe?: number;
 }
 
 export type PlayerKind = "human" | "bot";
@@ -40,6 +42,8 @@ export interface TableConfig {
   minBet: number;
   maxBet: number;
   seatCount: number;
+  /** 52-card decks in the shoe. Always derived from `seatCount` at table create. */
+  deckCount: number;
   roundsUntilSettle: number;
 }
 
@@ -48,6 +52,7 @@ export const DEFAULT_CONFIG: TableConfig = {
   minBet: 5_000,
   maxBet: 100_000,
   seatCount: 4,
+  deckCount: 4,
   roundsUntilSettle: 24,
 };
 
@@ -58,6 +63,15 @@ export function clampSeatCount(n: unknown): number {
   const v = typeof n === "number" ? n : Number(n);
   if (!Number.isFinite(v)) return DEFAULT_CONFIG.seatCount;
   return Math.min(MAX_SEATS, Math.max(MIN_SEATS, Math.round(v)));
+}
+
+/** 1 人 1 副，2–3 人 2 副，4–5 人 4 副，6 人 6 副。 */
+export function decksForSeats(seatCount: number): number {
+  const n = clampSeatCount(seatCount);
+  if (n <= 1) return 1;
+  if (n <= 3) return 2;
+  if (n <= 5) return 4;
+  return 6;
 }
 
 export const DEALER_NAME = "庄家";
