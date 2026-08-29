@@ -1,0 +1,15 @@
+{
+  "name": "21点 (Eating Hotpot)",
+  "install": "npm install",
+  "terminals": [
+    {
+      "name": "dev",
+      "command": "npm run dev",
+      "description": "Builds @hotpot/engine once, then concurrently runs the engine tsc watcher, the Fastify HTTP + WebSocket server on port 8080, and the Vite web dev server on port 5173. Open http://127.0.0.1:5173 (Vite proxies /api and /ws to 127.0.0.1:8080)."
+    }
+  ],
+  "ports": [
+    { "name": "web (Vite dev server)", "port": 5173 },
+    { "name": "server (Fastify HTTP + WebSocket)", "port": 8080 }
+  ]
+}
