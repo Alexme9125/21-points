@@ -13,6 +13,7 @@ describe("bot table names", () => {
       "Milo",
       "Vera",
       "Juno",
+      "Logan",
     ]);
   });
 });

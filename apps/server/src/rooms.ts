@@ -1,7 +1,9 @@
 import {
   advance,
   applyAction,
+  botActionReaction,
   botThinkMs,
+  botThoughtFor,
   chooseBotAction,
   continueFromSettlement,
   clampSeatCount,
@@ -15,6 +17,8 @@ import {
   revealHoldMs,
   startHand,
   toPublicState,
+  type BotCue,
+  type BotReaction,
   type PlayerAction,
   type PublicState,
   type TableState,
@@ -41,6 +45,8 @@ export interface RoomSnapshot {
   state: PublicState | null;
   deadline: number | null;
   status: string;
+  botCue: BotCue | null;
+  botReaction: BotReaction | null;
 }
 
 interface Room {
@@ -52,6 +58,9 @@ interface Room {
   table: TableState | null;
   sockets: Map<string, Set<WebSocket>>;
   deadline: number | null;
+  botCue: BotCue | null;
+  botReaction: BotReaction | null;
+  reactionSeq: number;
   timers: {
     bot?: ReturnType<typeof setTimeout>;
     action?: ReturnType<typeof setTimeout>;
@@ -74,20 +83,19 @@ function statusText(room: Room): string {
   if (table.phase === "betting") {
     const p = currentPlayer(table);
     if (!p) return "等待下注";
-    return p.kind === "bot" ? `${p.name} 思考中` : `轮到 ${p.name} 下注`;
+    return p.kind === "bot" ? `${p.name} 下注中` : `轮到 ${p.name} 下注`;
   }
   if (table.phase === "awaiting") {
     const p = currentPlayer(table);
     if (!p) return "等待行动";
-    return p.kind === "bot" ? `${p.name} 思考中` : `轮到 ${p.name}`;
+    if (p.kind === "bot") {
+      return room.botCue?.playerId === p.id && room.botCue.pace === "tank"
+        ? `${p.name} 纠结中`
+        : `${p.name} 思考中`;
+    }
+    return `轮到 ${p.name}`;
   }
   if (table.phase === "reveal") {
-    const kind = table.outcome?.kind;
-    if (kind === "blackjack") return "黑杰克！";
-    if (kind === "bust") return "爆牌";
-    if (kind === "win") return "闲家赢";
-    if (kind === "lose") return "庄家赢";
-    if (kind === "push") return "平局";
     return "庄家开牌";
   }
   if (table.phase === "settlement") return "本盘结束";
@@ -107,6 +115,8 @@ function snapshot(room: Room, you: string): RoomSnapshot {
     state: room.table ? toPublicState(room.table) : null,
     deadline: room.deadline,
     status: statusText(room),
+    botCue: room.botCue,
+    botReaction: room.botReaction,
   };
 }
 
@@ -128,6 +138,7 @@ function clearTimers(room: Room): void {
     room.timers[key] = undefined;
   }
   room.deadline = null;
+  room.botCue = null;
 }
 
 function takePersonas(room: Room, n: number): typeof LLM_PERSONAS[number][] {
@@ -155,6 +166,8 @@ function fillBots(room: Room): void {
 
 function startTable(room: Room): void {
   fillBots(room);
+  room.botCue = null;
+  room.botReaction = null;
   room.table = startHand(
     createTable(
       room.seats.map((s) => ({
@@ -192,10 +205,17 @@ function schedule(room: Room): void {
     if (player.kind === "bot") {
       const think = botThinkMs(table);
       room.deadline = null;
+      room.botCue = botThoughtFor(table, player.id, think);
       room.timers.bot = setTimeout(() => {
         try {
-          const action = chooseBotAction(room.table!);
-          room.table = applyAction(room.table!, player.id, action);
+          const before = room.table!;
+          const action = chooseBotAction(before);
+          const after = applyAction(before, player.id, action);
+          room.table = after;
+          room.botCue = null;
+          room.reactionSeq += 1;
+          const reaction = botActionReaction(before, after, player.id, action, room.reactionSeq);
+          if (reaction) room.botReaction = reaction;
           broadcast(room);
           schedule(room);
         } catch (err) {
@@ -221,6 +241,7 @@ function schedule(room: Room): void {
   if (table.phase === "reveal") {
     const delay = revealHoldMs(table.outcome?.kind);
     room.timers.advance = setTimeout(() => {
+      room.botReaction = null;
       room.table = advance(room.table!);
       broadcast(room);
       schedule(room);
@@ -229,6 +250,7 @@ function schedule(room: Room): void {
   }
 
   if (table.phase === "settlement") {
+    room.botReaction = null;
     room.timers.settle = setTimeout(() => {
       room.table = continueFromSettlement(room.table!);
       broadcast(room);
@@ -281,6 +303,9 @@ export function createRoom(
     table: null,
     sockets: new Map(),
     deadline: null,
+    botCue: null,
+    botReaction: null,
+    reactionSeq: 0,
     timers: {},
     usedPersonas: new Set(),
     rng: Date.now() % 0x7fffffff,
@@ -461,6 +486,7 @@ function removeHuman(room: Room, playerId: string): boolean {
 function abortPvpTable(room: Room): void {
   clearTimers(room);
   room.table = null;
+  room.botReaction = null;
   room.seats = room.seats.filter((s) => s.kind === "human");
   room.usedPersonas.clear();
 }

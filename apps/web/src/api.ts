@@ -1,4 +1,4 @@
-import type { PublicState } from "@hotpot/engine";
+import type { BotCue, BotReaction, PublicState } from "@hotpot/engine";
 
 export interface Seat {
   id: string;
@@ -20,6 +20,8 @@ export interface RoomSnapshot {
   state: PublicState | null;
   deadline: number | null;
   status: string;
+  botCue?: BotCue | null;
+  botReaction?: BotReaction | null;
   message?: string;
 }
 

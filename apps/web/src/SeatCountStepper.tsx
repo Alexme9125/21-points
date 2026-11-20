@@ -6,7 +6,7 @@ export function SeatCountStepper({
   max = MAX_SEATS,
   disabled,
   onChange,
-  label = "闲家人数",
+  label = "座位数",
 }: {
   value: number;
   min?: number;
@@ -16,32 +16,32 @@ export function SeatCountStepper({
   label?: string;
 }) {
   const decks = decksForSeats(value);
+  const options = Array.from({ length: MAX_SEATS - MIN_SEATS + 1 }, (_, i) => MIN_SEATS + i);
+
   return (
-    <div className="stepper">
-      <div className="stepper-copy">
-        <span className="stepper-label">{label}</span>
-        <span className="stepper-hint">将使用 {decks} 副牌</span>
+    <div className="seat-picker">
+      <div className="seat-picker-head">
+        <span className="field-label">{label}</span>
+        <span className="seat-picker-meta">{decks} 副牌靴</span>
       </div>
-      <div className="stepper-controls">
-        <button
-          type="button"
-          className="btn ghost stepper-btn"
-          disabled={disabled || value <= min}
-          onClick={() => onChange(value - 1)}
-          aria-label="减少人数"
-        >
-          −
-        </button>
-        <b>{value}</b>
-        <button
-          type="button"
-          className="btn ghost stepper-btn"
-          disabled={disabled || value >= max}
-          onClick={() => onChange(value + 1)}
-          aria-label="增加人数"
-        >
-          +
-        </button>
+      <div className="seat-segments" role="radiogroup" aria-label={label}>
+        {options.map((n) => {
+          const active = n === value;
+          const blocked = Boolean(disabled || n < min || n > max);
+          return (
+            <button
+              key={n}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              className={`seat-seg ${active ? "selected" : ""}`}
+              disabled={blocked}
+              onClick={() => onChange(n)}
+            >
+              {n}
+            </button>
+          );
+        })}
       </div>
     </div>
   );

@@ -1,9 +1,9 @@
 import type { OutcomeKind, PublicPlayer, RevealOutcome, SeatCards } from "./types.js";
 
 export const FX_MS = {
-  wager: 1000,
-  flip: 800,
-  result: 1100,
+  wager: 500,
+  flip: 900,
+  result: 1300,
   payout: 1000,
 } as const;
 
@@ -15,7 +15,7 @@ export function openingRevealStage(kind: OutcomeKind | undefined): RevealFxStage
 }
 
 export function revealHoldMs(_kind?: OutcomeKind): number {
-  return FX_MS.flip + FX_MS.result + FX_MS.payout + 700;
+  return FX_MS.wager + FX_MS.flip + FX_MS.result + FX_MS.payout + 900;
 }
 
 export function shouldShowDealerHole(stage: RevealFxStage, hidden: boolean, phaseReveal: boolean): boolean {

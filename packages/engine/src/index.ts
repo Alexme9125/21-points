@@ -15,6 +15,8 @@ export {
   styleForPersona,
   DEFAULT_THINK_LINES,
   type LlmPersona,
+  type PersonaArchetype,
+  type PersonaVoice,
   type PlayStyle,
 } from "./personas.js";
 export { nextRng, shuffleInPlace, pickN } from "./rng.js";
@@ -43,10 +45,22 @@ export {
   toPublicState,
   computeBetRange,
   currentPlayer,
+  deriveBotMood,
   forceBetting,
   forcePlaying,
 } from "./table.js";
-export { chooseBotAction, botThinkMs, evaluateSpot, basicPlay } from "./bot.js";
+export {
+  chooseBotAction,
+  botThinkMs,
+  evaluateSpot,
+  basicPlay,
+  trueCountOf,
+  botMoodFor,
+  botThoughtFor,
+  botActionReaction,
+  botRevealReactions,
+  type SpotAnalysis,
+} from "./bot.js";
 export {
   FX_MS,
   openingRevealStage,
@@ -68,6 +82,11 @@ export {
   type Rank,
   type Suit,
   type Player,
+  type PlayerMemory,
+  type BotMood,
+  type BotPace,
+  type BotCue,
+  type BotReaction,
   type TableConfig,
   type TableState,
   type PublicState,
