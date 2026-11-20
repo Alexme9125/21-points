@@ -16,6 +16,14 @@ function defaultAmount(range: BetRange, lastBet: number | null): number {
   return range.min;
 }
 
+function chipTier(amount: number, min: number): string {
+  const ratio = min > 0 ? amount / min : 1;
+  if (ratio >= 10) return "tier-max";
+  if (ratio >= 5) return "tier-mid";
+  if (ratio >= 2) return "tier-low";
+  return "tier-min";
+}
+
 export function ActionBar({
   phase,
   range,
@@ -79,11 +87,11 @@ export function ActionBar({
     function submitCustom() {
       const parsed = parseBetInput(draft);
       if (parsed == null) {
-        setHint("请输入金额，如 3K 或 3000");
+        setHint("请输入有效金额，例如 3K 或 3000");
         return;
       }
       if (parsed < limits.min || parsed > limits.max) {
-        setHint(`须在 ${formatTokens(limits.min)}–${formatTokens(limits.max)}`);
+        setHint(`下注范围 ${formatTokens(limits.min)}–${formatTokens(limits.max)}`);
         return;
       }
       onBet(clampBet(parsed, limits.min, limits.max, limits.min));
@@ -93,34 +101,37 @@ export function ActionBar({
       <div className="action-bar bet-actions">
         <div className="chip-bets">
           {chips.map((chip) => {
-            const isMin = chip === range.min;
-            const isMax = chip === range.max && chips.length > 1;
-            const label = only
-              ? `全下 ${formatTokens(chip)}`
-              : isMin
-                ? `最小 ${formatTokens(chip)}`
-                : isMax
-                  ? `最大 ${formatTokens(chip)}`
-                  : formatTokens(chip);
+            const label = only ? `全下 ${formatTokens(chip)}` : formatTokens(chip);
             return (
               <button
                 key={chip}
                 type="button"
-                className={`btn chip-btn ${isMax || only ? "primary" : "ghost"}`}
+                className={`chip-btn ${chipTier(chip, range.min)}`}
                 disabled={disabled}
                 onClick={() => onBet(chip)}
               >
-                {label}
+                <span className="chip-dot" aria-hidden="true" />
+                <span>{label}</span>
               </button>
             );
           })}
           {repeat ? (
-            <button type="button" className="btn ghost chip-btn" disabled={disabled} onClick={() => onBet(repeat)}>
-              续注
+            <button
+              type="button"
+              className="btn ghost quick-bet-btn"
+              disabled={disabled}
+              onClick={() => onBet(repeat)}
+            >
+              续注 {formatTokens(repeat)}
             </button>
           ) : null}
           {doubled ? (
-            <button type="button" className="btn ghost chip-btn" disabled={disabled} onClick={() => onBet(doubled)}>
+            <button
+              type="button"
+              className="btn ghost quick-bet-btn"
+              disabled={disabled}
+              onClick={() => onBet(doubled)}
+            >
               续×2
             </button>
           ) : null}
@@ -174,34 +185,50 @@ export function ActionBar({
   }
 
   const has = (type: ActionType) => actions.includes(type);
-  const extra = wager > 0 ? ` +${formatTokens(wager)}` : "";
-  const half = wager > 0 ? ` · 收 ${formatTokens(Math.floor(wager / 2))}` : "";
+  const extra = wager > 0 ? `+${formatTokens(wager)}` : "";
+  const half = wager > 0 ? `收 ${formatTokens(Math.floor(wager / 2))}` : "";
+  const hasSecondary = has("surrender") || has("split") || has("double");
 
   return (
     <div className="action-bar play-actions">
-      {has("surrender") ? (
-        <button className="btn ghost fold-btn" disabled={disabled} onClick={onSurrender}>
-          投降{half}
-        </button>
+      {hasSecondary ? (
+        <div className="action-group secondary-group">
+          {has("surrender") ? (
+            <button type="button" className="btn ghost tactical-btn fold-btn" disabled={disabled} onClick={onSurrender}>
+              <span>投降</span>
+              {half ? <small>{half}</small> : null}
+              <kbd>R</kbd>
+            </button>
+          ) : null}
+          {has("split") ? (
+            <button type="button" className="btn ghost tactical-btn" disabled={disabled} onClick={onSplit}>
+              <span>分牌</span>
+              {extra ? <small>{extra}</small> : null}
+              <kbd>P</kbd>
+            </button>
+          ) : null}
+          {has("double") ? (
+            <button type="button" className="btn ghost tactical-btn" disabled={disabled} onClick={onDouble}>
+              <span>加倍</span>
+              {extra ? <small>{extra}</small> : null}
+              <kbd>D</kbd>
+            </button>
+          ) : null}
+        </div>
       ) : null}
-      {has("split") ? (
-        <button className="btn ghost" disabled={disabled} onClick={onSplit}>
-          分牌{extra}
+
+      <div className="action-group primary-group">
+        {has("hit") ? (
+          <button type="button" className="btn primary play-main-btn" disabled={disabled} onClick={onHit}>
+            <span>要牌</span>
+            <kbd>H</kbd>
+          </button>
+        ) : null}
+        <button type="button" className="btn ink-btn play-main-btn add-btn" disabled={disabled} onClick={onStand}>
+          <span>停牌</span>
+          <kbd>S</kbd>
         </button>
-      ) : null}
-      {has("double") ? (
-        <button className="btn ghost" disabled={disabled} onClick={onDouble}>
-          加倍{extra}
-        </button>
-      ) : null}
-      {has("hit") ? (
-        <button className="btn" disabled={disabled} onClick={onHit}>
-          要牌
-        </button>
-      ) : null}
-      <button className="btn primary add-btn" disabled={disabled} onClick={onStand}>
-        停牌
-      </button>
+      </div>
     </div>
   );
 }

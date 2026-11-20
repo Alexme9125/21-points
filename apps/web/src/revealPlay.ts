@@ -15,9 +15,11 @@ function outcomeKey(state: PublicState | null): string {
 }
 
 function statusForStage(stage: RevealFxStage, fallback: string): string {
-  if (stage === "flip") return "庄家开牌";
+  if (stage === "wager") return "准备开牌";
+  if (stage === "flip") return "庄家亮牌";
   if (stage === "result") return "比点数";
-  if (stage === "payout") return "派彩";
+  if (stage === "payout") return "结算派彩";
+  if (stage === "done") return "本局结束";
   return fallback;
 }
 
@@ -38,10 +40,14 @@ export function useRevealPlay(state: PublicState | null, fallbackStatus: string)
     const later = (ms: number, next: RevealFxStage) => {
       timers.push(window.setTimeout(() => setStage(next), ms));
     };
-    later(FX_MS.flip, "flip");
-    later(FX_MS.flip + FX_MS.result, "result");
-    later(FX_MS.flip + FX_MS.result + FX_MS.payout, "payout");
-    later(FX_MS.flip + FX_MS.result + FX_MS.payout + 400, "done");
+    const tFlip = FX_MS.wager;
+    const tResult = tFlip + FX_MS.flip;
+    const tPayout = tResult + FX_MS.result;
+    const tDone = tPayout + FX_MS.payout;
+    later(tFlip, "flip");
+    later(tResult, "result");
+    later(tPayout, "payout");
+    later(tDone, "done");
     return () => {
       for (const t of timers) window.clearTimeout(t);
     };

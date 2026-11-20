@@ -147,6 +147,44 @@ export interface Settlement {
   deltas: Record<string, number>;
 }
 
+export type BotMood = "calm" | "focused" | "hot" | "cautious" | "tilted" | "bold";
+export type BotPace = "snap" | "normal" | "deliberate" | "tank";
+
+export interface PlayerMemory {
+  /** Positive = consecutive wins, negative = consecutive losses. */
+  streak: number;
+  /** Last resolved round net chip delta (payout - total wager). */
+  lastNet: number;
+  /** Headline outcome from the player's last resolved round. */
+  lastOutcome: OutcomeKind | null;
+  /** Rolling confidence/momentum score in [-1, 1]. */
+  confidence: number;
+  /** Number of rounds played in the current session. */
+  handsPlayed: number;
+  /** Number of winning rounds in the current session. */
+  handsWon: number;
+  /** Deal counter when the player last busted (-1 if never). */
+  lastBustDeal: number;
+}
+
+export interface BotCue {
+  playerId: string;
+  phase: "betting" | "awaiting";
+  pace: BotPace;
+  mood: BotMood;
+  /** Ordered thought beats shown while the bot deliberates. */
+  lines: string[];
+  /** Planned think duration in ms, used to pace multi-beat speech bubbles. */
+  thinkMs: number;
+}
+
+export interface BotReaction {
+  id: number;
+  playerId: string;
+  text: string;
+  tone: "neutral" | "positive" | "negative" | "bold";
+}
+
 export interface TableState {
   config: TableConfig;
   players: Player[];
@@ -168,6 +206,12 @@ export interface TableState {
   lastBets: Record<string, number>;
   tokensAtHandStart: Record<string, number>;
   settlement: Settlement | null;
+  /** Public Hi-Lo running count of revealed cards since the last shuffle. */
+  runningCount: number;
+  /** Publicly revealed card count since the last shuffle. */
+  seenCards: number;
+  /** Per-player session memory (streaks, mood, momentum). */
+  memory: Record<string, PlayerMemory>;
 }
 
 export type PlayerAction =
@@ -186,6 +230,8 @@ export interface PublicPlayer {
   tokens: number;
   inHand: boolean;
   cards?: SeatCards;
+  streak?: number;
+  mood?: BotMood;
 }
 
 export interface PublicDealer {
@@ -216,4 +262,6 @@ export interface PublicState {
   legalActions: ActionType[];
   logs: LogEntry[];
   settlement: Settlement | null;
+  deckRemaining: number;
+  deckTotal: number;
 }

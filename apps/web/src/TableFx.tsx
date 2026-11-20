@@ -1,4 +1,4 @@
-import type { PublicState, RevealFxStage, RevealOutcome } from "@hotpot/engine";
+import { formatTokens, type PublicState, type RevealFxStage, type RevealOutcome } from "@hotpot/engine";
 import { useEffect, useRef, useState } from "react";
 import { playOutcome, playWager } from "./sound";
 
@@ -9,6 +9,7 @@ interface Ball {
   dx: number;
   dy: number;
   delay: number;
+  tier: "emerald" | "crimson" | "navy" | "brass";
 }
 
 interface Slogan {
@@ -25,25 +26,31 @@ function centerOf(el: Element, root: DOMRect): { x: number; y: number } {
 }
 
 function sloganFor(outcome: RevealOutcome): { text: string; tone: string } | null {
-  if (outcome.kind === "blackjack") return { text: "黑杰克", tone: "triple" };
-  if (outcome.kind === "win") return { text: "赢", tone: "win" };
-  if (outcome.kind === "push") return { text: "平", tone: "skip" };
-  if (outcome.kind === "bust") return { text: "爆牌", tone: "horn" };
-  if (outcome.kind === "lose") return { text: "输", tone: "lose" };
-  if (outcome.kind === "surrender") return { text: "投降", tone: "skip" };
+  if (outcome.kind === "blackjack") {
+    return { text: `黑杰克 +${formatTokens(outcome.amount - outcome.wager)}`, tone: "triple" };
+  }
   return null;
 }
 
 function chipCount(amount: number): number {
-  return Math.min(8, Math.max(4, Math.round(amount / 12_000)));
+  return Math.min(7, Math.max(3, Math.round(amount / 4_000)));
+}
+
+function chipTierFor(amount: number): Ball["tier"] {
+  if (amount >= 10_000) return "brass";
+  if (amount >= 5_000) return "crimson";
+  if (amount >= 2_000) return "navy";
+  return "emerald";
 }
 
 export function TableFx({
   state,
   stage,
+  you,
 }: {
   state: PublicState | null;
   stage: RevealFxStage;
+  you: string;
 }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const seq = useRef(0);
@@ -56,7 +63,7 @@ export function TableFx({
     : "";
   const dealKey = state ? `deal-${state.handNumber}-${state.dealsThisHand}-${state.phase}` : "";
 
-  function fly(fromEl: Element | null, toEl: Element | null, count: number) {
+  function fly(fromEl: Element | null, toEl: Element | null, count: number, tier: Ball["tier"]) {
     const host = hostRef.current;
     if (!host || !fromEl || !toEl) return;
     const root = host.getBoundingClientRect();
@@ -65,20 +72,21 @@ export function TableFx({
     const next: Ball[] = [];
     for (let i = 0; i < count; i++) {
       seq.current += 1;
-      const jitter = (n: number) => n + (Math.random() - 0.5) * 18;
+      const jitter = (n: number) => n + (Math.random() - 0.5) * 16;
       next.push({
         id: seq.current,
         x: jitter(from.x),
         y: jitter(from.y),
-        dx: to.x - from.x + (Math.random() - 0.5) * 24,
-        dy: to.y - from.y + (Math.random() - 0.5) * 16,
-        delay: i * 45,
+        dx: to.x - from.x + (Math.random() - 0.5) * 20,
+        dy: to.y - from.y + (Math.random() - 0.5) * 14,
+        delay: i * 48,
+        tier,
       });
     }
     setBalls((prev) => [...prev, ...next]);
     window.setTimeout(() => {
       setBalls((prev) => prev.filter((b) => !next.some((n) => n.id === b.id)));
-    }, 900 + count * 45);
+    }, 860 + count * 48);
   }
 
   function shout(playerEl: Element | null, text: string, tone: string) {
@@ -87,24 +95,27 @@ export function TableFx({
     const root = host.getBoundingClientRect();
     const at = centerOf(playerEl, root);
     seq.current += 1;
-    const item: Slogan = { id: seq.current, text, x: at.x, y: at.y - 28, tone };
+    const item: Slogan = { id: seq.current, text, x: at.x, y: at.y - 24, tone };
     setSlogans((prev) => [...prev, item]);
     window.setTimeout(() => {
       setSlogans((prev) => prev.filter((s) => s.id !== item.id));
-    }, 1700);
+    }, 1550);
   }
 
   useEffect(() => {
     if (!state || state.phase !== "awaiting") return;
     const host = hostRef.current;
     if (!host) return;
-    const pool = host.parentElement?.querySelector("[data-pool]");
+    const pool = host.parentElement?.querySelector("[data-pool] .chips") ?? host.parentElement?.querySelector("[data-pool]");
     const seats = host.parentElement?.querySelectorAll("[data-player-id]");
     if (!pool || !seats?.length) return;
-    shout(pool, "开牌", "ante");
     playWager();
     seats.forEach((seat, i) => {
-      window.setTimeout(() => fly(seat, pool, 3), i * 80);
+      const id = seat.getAttribute("data-player-id");
+      const p = state.players.find((pl) => pl.id === id);
+      const wager = (p?.cards?.hands ?? []).reduce((sum, h) => sum + h.bet, 0);
+      if (wager <= 0) return;
+      window.setTimeout(() => fly(seat, pool, 3, chipTierFor(wager)), i * 70);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dealKey]);
@@ -117,40 +128,48 @@ export function TableFx({
     const host = hostRef.current;
     if (!host) return;
     const root = host.parentElement;
-    const pool = root?.querySelector("[data-pool]");
+    const pool = root?.querySelector("[data-pool] .chips") ?? root?.querySelector("[data-pool]");
 
     if (stage === "result") {
+      let preferredSound: RevealOutcome["kind"] | null = null;
+      let fallbackSound: RevealOutcome["kind"] | null = null;
       for (const player of state.players) {
         const seat = root?.querySelector(`[data-player-id="${player.id}"]`);
         for (const hand of player.cards?.hands ?? []) {
           if (!hand.outcome) continue;
           const slogan = sloganFor(hand.outcome);
           if (slogan) shout(seat, slogan.text, slogan.tone);
-          playOutcome(hand.outcome.kind);
+          if (!fallbackSound) fallbackSound = hand.outcome.kind;
+          if (player.id === you && !preferredSound) preferredSound = hand.outcome.kind;
         }
       }
+      const soundKind = preferredSound ?? fallbackSound;
+      if (soundKind) playOutcome(soundKind);
       return;
     }
 
     if (stage === "payout") {
+      let anyPayout = false;
       for (const player of state.players) {
         const seat = root?.querySelector(`[data-player-id="${player.id}"]`);
         for (const hand of player.cards?.hands ?? []) {
           const outcome = hand.outcome;
           if (!outcome || outcome.amount <= 0) continue;
-          fly(pool, seat, chipCount(outcome.amount));
+          anyPayout = true;
+          fly(pool, seat, chipCount(outcome.amount), chipTierFor(outcome.amount));
         }
       }
+      if (anyPayout) playWager();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stage, outcomeKey]);
 
   return (
-    <div className="fx-layer" ref={hostRef}>
+    <div className="fx-layer" ref={hostRef} aria-hidden="true">
       {balls.map((ball) => (
         <span
           key={ball.id}
-          className="chip-ball"
+          className={`chip-ball chip-${ball.tier}`}
           style={{
             left: ball.x,
             top: ball.y,
@@ -161,13 +180,13 @@ export function TableFx({
         />
       ))}
       {slogans.map((item) => (
-        <b
+        <span
           key={item.id}
           className={`slogan ${item.tone}`}
           style={{ left: item.x, top: item.y }}
         >
           {item.text}
-        </b>
+        </span>
       ))}
     </div>
   );

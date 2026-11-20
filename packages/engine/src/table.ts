@@ -1,6 +1,7 @@
 import { isLegalBetAmount } from "./bets.js";
-import { cardLabel, makeDeck, shoeCut } from "./cards.js";
+import { CARDS_PER_DECK, cardLabel, makeDeck, shoeCut } from "./cards.js";
 import { formatTokens } from "./format.js";
+import { styleForPersona } from "./personas.js";
 import { nextRng, shuffleInPlace } from "./rng.js";
 import {
   canHit,
@@ -16,12 +17,15 @@ import {
 import type {
   ActionType,
   BetRange,
+  BotMood,
   Card,
   HandState,
   LogEntry,
   LogKind,
+  OutcomeKind,
   Player,
   PlayerAction,
+  PlayerMemory,
   PublicDealer,
   PublicState,
   RevealOutcome,
@@ -34,6 +38,59 @@ import { clampSeatCount, DEALER_NAME, decksForSeats, DEFAULT_CONFIG, MAX_SEATS, 
 
 function clone<T>(value: T): T {
   return structuredClone(value);
+}
+
+/** Standard Hi-Lo value of a publicly visible card: 2-6 -> +1, 7-9 -> 0, 10/J/Q/K/A -> -1. */
+function hiLoValue(card: Card): number {
+  if (card.rank >= 2 && card.rank <= 6) return 1;
+  if (card.rank === 1 || card.rank >= 10) return -1;
+  return 0;
+}
+
+function observePublicCard(state: TableState, card: Card): void {
+  state.runningCount += hiLoValue(card);
+  state.seenCards += 1;
+}
+
+function emptyMemory(): PlayerMemory {
+  return {
+    streak: 0,
+    lastNet: 0,
+    lastOutcome: null,
+    confidence: 0,
+    handsPlayed: 0,
+    handsWon: 0,
+    lastBustDeal: -1,
+  };
+}
+
+function memoryOf(state: TableState, playerId: string): PlayerMemory {
+  const existing = state.memory[playerId];
+  if (existing) return existing;
+  const created = emptyMemory();
+  state.memory[playerId] = created;
+  return created;
+}
+
+export function deriveBotMood(
+  player: Player,
+  memory: PlayerMemory | undefined,
+  startingTokens: number,
+): BotMood {
+  const mem = memory ?? emptyMemory();
+  const style = styleForPersona(player.personaId);
+  if (mem.streak >= 2 || mem.confidence >= 0.42) return "hot";
+  if (mem.streak <= -2 && style.tiltProne >= 0.45) return "tilted";
+  if (mem.confidence <= -0.35 || player.tokens < startingTokens * 0.45) {
+    return style.tiltProne >= 0.5 ? "tilted" : "cautious";
+  }
+  if (style.shove >= 0.55 && mem.confidence >= 0.1) return "bold";
+  if (style.countSkill >= 0.7 && mem.handsPlayed >= 1) return "focused";
+  return "calm";
+}
+
+function clampUnit(n: number): number {
+  return Math.max(-1, Math.min(1, n));
 }
 
 function pushLog(
@@ -57,6 +114,8 @@ function pushLog(
 function shuffleDeck(state: TableState): void {
   state.deck = makeDeck(state.config.deckCount);
   state.rng = shuffleInPlace(state.deck, state.rng);
+  state.runningCount = 0;
+  state.seenCards = 0;
   pushLog(state, "shuffle", `重新洗牌（${state.config.deckCount} 副）`);
 }
 
@@ -178,9 +237,10 @@ function beginBetting(state: TableState): void {
   state.phase = "betting";
 }
 
-function dealTo(state: TableState, cards: Card[]): Card {
+function dealTo(state: TableState, cards: Card[], visible = true): Card {
   const card = draw(state);
   cards.push(card);
+  if (visible) observePublicCard(state, card);
   return card;
 }
 
@@ -213,7 +273,13 @@ function liveHandsRemain(state: TableState): boolean {
 }
 
 function settleRound(state: TableState): void {
+  const wasRevealed = state.dealerRevealed;
   state.dealerRevealed = true;
+  if (!wasRevealed && state.dealer.length > 1) {
+    for (const card of state.dealer.slice(1)) {
+      observePublicCard(state, card);
+    }
+  }
   const dealerLabel = isBlackjack(state.dealer)
     ? "黑杰克"
     : isBust(state.dealer)
@@ -225,6 +291,13 @@ function settleRound(state: TableState): void {
   for (const player of state.players) {
     const seat = state.lastCards[player.id];
     if (!seat) continue;
+    let totalWager = 0;
+    let totalPayout = 0;
+    let headline: OutcomeKind | null = null;
+    let bustedAny = false;
+    let badBeat = false;
+    let doubledWin = false;
+
     for (const hand of seat.hands) {
       if (hand.cards.length === 0) continue;
       const { kind, payout } = payoutFor(hand, state.dealer);
@@ -232,6 +305,13 @@ function settleRound(state: TableState): void {
       hand.outcome = outcome;
       player.tokens += payout;
       state.pot = Math.max(0, state.pot - hand.bet);
+      totalWager += hand.bet;
+      totalPayout += payout;
+      if (!headline || kind === "blackjack") headline = kind;
+      if (kind === "bust") bustedAny = true;
+      const total = handValue(hand.cards).total;
+      if (kind === "lose" && total >= 19 && total <= 20) badBeat = true;
+      if (kind === "win" && hand.bet >= state.config.minBet * 4) doubledWin = true;
       if (!firstOutcome) firstOutcome = outcome;
       const verb =
         kind === "blackjack"
@@ -252,6 +332,34 @@ function settleRound(state: TableState): void {
         { playerId: player.id, name: player.name, amount: payout },
       );
     }
+
+    if (totalWager > 0 && headline) {
+      const mem = memoryOf(state, player.id);
+      const net = totalPayout - totalWager;
+      mem.handsPlayed += 1;
+      mem.lastNet = net;
+      mem.lastOutcome = headline;
+      if (bustedAny) mem.lastBustDeal = state.dealsThisHand + 1;
+      if (net > 0) {
+        mem.handsWon += 1;
+        mem.streak = mem.streak > 0 ? mem.streak + 1 : 1;
+      } else if (net < 0) {
+        mem.streak = mem.streak < 0 ? mem.streak - 1 : -1;
+      } else {
+        mem.streak = Math.trunc(mem.streak * 0.5);
+      }
+
+      let impulse = 0;
+      if (headline === "blackjack") impulse = 0.44;
+      else if (net > 0) impulse = doubledWin ? 0.34 : 0.22;
+      else if (net === 0) impulse = 0.02;
+      else if (headline === "surrender") impulse = -0.08;
+      else if (badBeat) impulse = -0.34;
+      else if (bustedAny) impulse = -0.3;
+      else impulse = -0.2;
+
+      mem.confidence = clampUnit(mem.confidence * 0.65 + impulse);
+    }
   }
   state.pot = 0;
   state.outcome = firstOutcome;
@@ -262,7 +370,7 @@ function settleRound(state: TableState): void {
 function playDealerThenSettle(state: TableState): void {
   if (liveHandsRemain(state) && !isBlackjack(state.dealer)) {
     while (dealerShouldHit(state.dealer)) {
-      dealTo(state, state.dealer);
+      dealTo(state, state.dealer, false);
     }
   }
   settleRound(state);
@@ -343,7 +451,7 @@ function dealRound(state: TableState): void {
       { playerId: player.id, name: player.name },
     );
   }
-  dealTo(state, state.dealer);
+  dealTo(state, state.dealer, false);
   pushLog(state, "deal", `${DEALER_NAME} 明牌 ${cardLabel(state.dealer[0]!)}`);
 
   if (isBlackjack(state.dealer)) {
@@ -421,6 +529,9 @@ export function createTable(
     lastBets: {},
     tokensAtHandStart: {},
     settlement: null,
+    runningCount: 0,
+    seenCards: 0,
+    memory: {},
   };
 }
 
@@ -440,6 +551,14 @@ export function startHand(state: TableState): TableState {
   for (const p of next.players) {
     tokensAtHandStart[p.id] = p.tokens;
     p.inHand = p.tokens >= next.config.minBet;
+    const prev = next.memory[p.id];
+    if (prev) {
+      prev.streak = 0;
+      prev.confidence = clampUnit(prev.confidence * 0.45);
+      prev.handsPlayed = 0;
+      prev.handsWon = 0;
+      prev.lastBustDeal = -1;
+    }
   }
   next.tokensAtHandStart = tokensAtHandStart;
 
@@ -680,15 +799,23 @@ export function toPublicState(state: TableState): PublicState {
   return {
     phase: state.phase,
     config: state.config,
-    players: state.players.map((p) => ({
-      id: p.id,
-      name: p.name,
-      kind: p.kind,
-      personaId: p.personaId,
-      tokens: p.tokens,
-      inHand: p.inHand,
-      cards: state.lastCards[p.id],
-    })),
+    players: state.players.map((p) => {
+      const mem = state.memory[p.id];
+      return {
+        id: p.id,
+        name: p.name,
+        kind: p.kind,
+        personaId: p.personaId,
+        tokens: p.tokens,
+        inHand: p.inHand,
+        cards: state.lastCards[p.id],
+        streak: mem?.streak ?? 0,
+        mood:
+          p.kind === "bot"
+            ? deriveBotMood(p, mem, state.config.startingTokens)
+            : undefined,
+      };
+    }),
     dealer: publicDealer(state),
     pot: state.pot,
     currentIndex: state.currentIndex,
@@ -704,6 +831,8 @@ export function toPublicState(state: TableState): PublicState {
     legalActions: legalActions(state),
     logs: state.logs.slice(-24),
     settlement: state.settlement,
+    deckRemaining: state.deck.length,
+    deckTotal: state.config.deckCount * CARDS_PER_DECK,
   };
 }
 
@@ -761,6 +890,10 @@ export function forcePlaying(
   next.pot = paid;
   next.lastBets = { ...next.lastBets, [player.id]: paid };
   next.deck = [...upcoming].reverse();
+  next.runningCount = 0;
+  next.seenCards = 0;
+  for (const card of cards) observePublicCard(next, card);
+  if (dealer[0]) observePublicCard(next, dealer[0]);
   if (hand.status !== "open") playDealerThenSettle(next);
   return next;
 }
